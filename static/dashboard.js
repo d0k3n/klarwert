@@ -79,7 +79,7 @@ renderSummaryByAssetClass(summary);
 renderTable("open-positions-table", openPositions, TABLE_CONFIGS['open-positions-table']);
 renderTable("closed-positions-table", closedPositions, TABLE_CONFIGS['closed-positions-table']);
 renderCashFlowChart(cashFlow);
-renderTransactions(transactions);
+renderTransactions(transactions, knockedIds);
 renderMonthlyPLChart(monthlyPl);
 renderTable("product-results-table", products, TABLE_CONFIGS['product-results-table']);
 renderAllocationChart(openPositions);
@@ -445,7 +445,7 @@ cb(null);
 }
 }
 
-function renderTransactions(txs) {
+function renderTransactions(txs, knockedIds) {
 const tbody = document.querySelector("#transactions-table tbody");
 const filterInput = document.getElementById("tx-filter");
 const table = document.getElementById("transactions-table");
@@ -522,6 +522,9 @@ return;
 
 filtered.forEach(t => {
 const tr = document.createElement("tr");
+const isBuy = t.type === "BUY" || t.type === "BUY_DERIVATIVE" || t.type === "BUY_WARRANT";
+const checked = t.id && knockedIds.has(t.id);
+if (checked) tr.className = "knocked";
 tr.innerHTML = `
 <td>${new Date(t.datetime).toLocaleDateString()}</td>
 <td>${t.type}</td>
@@ -530,7 +533,22 @@ tr.innerHTML = `
 <td class="num">${t.shares?.toLocaleString(undefined, {minimumFractionDigits: 4}) || ""}</td>
 <td class="num">${t.price != null ? `\u20AC${t.price.toLocaleString(undefined, {minimumFractionDigits: 2})}` : ""}</td>
 <td class="num">${t.amount != null ? `\u20AC${t.amount.toLocaleString(undefined, {minimumFractionDigits: 2})}` : ""}</td>
+<td class="knocked-col">${isBuy && t.id ? `<input type="checkbox" class="knocked-cb" ${checked ? "checked" : ""}>` : "\u2014"}</td>
 `;
+const cb = tr.querySelector(".knocked-cb");
+if (cb) {
+cb.addEventListener("change", async () => {
+const txnId = t.id;
+const r = await fetch(`${BASE}/api/knocked_down/toggle`, {
+method: "POST",
+headers: {"Content-Type": "application/json"},
+body: JSON.stringify({id: txnId}),
+});
+const data = await r.json();
+if (data.flagged) { knockedIds.add(txnId); tr.className = "knocked"; }
+else { knockedIds.delete(txnId); tr.className = ""; }
+});
+}
 tbody.appendChild(tr);
 });
 }

@@ -170,6 +170,10 @@ tbody tr:nth-child(even):hover { background: var(--bg-elevated); }
 #product-charts > div { display: flex; gap: 24px; flex-wrap: wrap; }
 #product-charts > div > div { flex: 1; min-width: 300px; }
 
+/* Knocked-out rows */
+.knocked { opacity: .5; text-decoration: line-through; }
+.knocked-col { text-align: center; }
+
 /* Responsive */
 @media (max-width: 768px) {
   body { padding: 12px; }
