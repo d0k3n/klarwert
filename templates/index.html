@@ -1,0 +1,108 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Portfolio Analysis</title>
+<link rel="stylesheet" href="/static/style.css">
+<script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.4/dist/chart.umd.min.js"></script>
+</head>
+<body>
+<h1>Portfolio Analysis</h1>
+<button id="reload-btn" onclick="window.reloadData()">&#x21bb; Reload CSV</button>
+<div id="reload-status" style="display:inline-block; margin-left:12px; font-size:0.9em;"></div>
+
+<section id="summary-cards" class="cards"></section>
+
+<section>
+  <h2>Monthly Realized P&amp;L</h2>
+  <canvas id="monthly-pl-chart" height="250"></canvas>
+</section>
+
+<section>
+<h2>Open Positions</h2>
+<table id="open-positions-table">
+<thead><tr>
+<th data-sort="isin">ISIN</th>
+<th data-sort="name">Name</th>
+<th data-sort="asset_class">Asset Class</th>
+<th data-sort="shares" class="num">Shares</th>
+<th data-sort="average_cost" class="num">Avg Cost</th>
+<th data-sort="total_cost" class="num">Total Cost</th>
+</tr></thead>
+<tbody></tbody>
+</table>
+</section>
+
+<section>
+<h2>Closed Positions</h2>
+<table id="closed-positions-table">
+<thead><tr>
+<th data-sort="isin">ISIN</th>
+<th data-sort="name">Name</th>
+<th data-sort="total_realized_pl" class="num">Realized P&amp;L</th>
+<th data-sort="closed_lots" class="num">Lots</th>
+<th data-sort="total_shares_sold" class="num">Shares Sold</th>
+</tr></thead>
+<tbody></tbody>
+</table>
+</section>
+
+<section>
+  <h2>Results by Product</h2>
+  <table id="product-results-table">
+    <thead><tr>
+      <th data-sort="name">Name</th>
+      <th data-sort="isin">ISIN</th>
+      <th data-sort="asset_class">Asset Class</th>
+      <th data-sort="status">Status</th>
+      <th data-sort="total_invested" class="num">Invested</th>
+      <th data-sort="total_realized_pl" class="num">Realized P&amp;L</th>
+      <th data-sort="total_dividends" class="num">Dividends</th>
+      <th data-sort="total_fees" class="num">Fees</th>
+      <th data-sort="total_trades" class="num">Trades</th>
+    </tr></thead>
+    <tbody></tbody>
+  </table>
+</section>
+
+<section id="product-charts">
+  <h2>Product Charts</h2>
+  <div style="display:flex; gap:24px; flex-wrap:wrap;">
+    <div style="flex:1; min-width:300px;">
+      <h3>Allocation by Product</h3>
+      <canvas id="allocation-chart" height="300"></canvas>
+    </div>
+    <div style="flex:1; min-width:300px;">
+      <h3>Dividends by Product</h3>
+      <canvas id="dividend-chart" height="300"></canvas>
+    </div>
+  </div>
+</section>
+
+<section>
+<h2>Cash Flow</h2>
+<canvas id="cash-flow-chart" height="300"></canvas>
+</section>
+
+<section>
+<h2>Recent Transactions</h2>
+<input type="text" id="tx-filter" placeholder="Filter by symbol or name...">
+<table id="transactions-table">
+        <thead><tr>
+          <th>Date</th>
+          <th>Type</th>
+          <th>Name</th>
+          <th>Symbol</th>
+          <th class="num">Shares</th>
+          <th class="num">Price</th>
+          <th class="num">Amount</th>
+          <th class="knocked-col">Knocked?</th>
+        </tr></thead>
+<tbody></tbody>
+</table>
+</section>
+
+<script src="/static/dashboard.js"></script>
+</body>
+</html>
