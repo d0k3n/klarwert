@@ -1,7 +1,7 @@
 import sys
 import os
 import json
-import tempfile
+import io
 import logging
 from pathlib import Path
 
@@ -49,13 +49,19 @@ def load_knocked_ids():
 def compute_data(flagged_ids=None):
     if df is None:
         return EMPTY_RESULT
+    ids = frozenset(flagged_ids or ())
+    if _cache["result"] is not None and _cache["ids"] == ids:
+        return _cache["result"]
     d = df.copy()
     flagged = set(flagged_ids or ())
     auto = auto_detect_knocked(d)
     merged = flagged | auto
     if merged:
         d["knocked"] = (d["tx_type"] == "BUY") & (d["transaction_id"].isin(merged))
-    return run_engine(d)
+    result = run_engine(d)
+    _cache["ids"] = ids
+    _cache["result"] = result
+    return result
 
 
 EMPTY_RESULT = {
@@ -69,6 +75,14 @@ EMPTY_RESULT = {
 }
 
 
+_cache = {"ids": None, "result": None}
+
+
+def invalidate_cache():
+    _cache["ids"] = None
+    _cache["result"] = None
+
+
 app = Flask(__name__, template_folder=resource_path("templates"), static_folder=resource_path("static"))
 
 
@@ -79,6 +93,7 @@ def api_reload():
         return jsonify({"ok": False, "error": "no CSV loaded"}), 400
     try:
         df = parse_csv(str(CSV_PATH))
+        invalidate_cache()
         logger.info("Reloaded %d transactions from %s", len(df), CSV_PATH)
         return jsonify({"ok": True, "count": len(df)})
     except Exception as e:
@@ -94,10 +109,7 @@ def api_upload():
         return jsonify({"ok": False, "error": "no file provided"}), 400
     try:
         raw = f.read()
-        tmp = tempfile.NamedTemporaryFile(suffix=".csv", delete=False, mode="wb")
-        tmp.write(raw)
-        tmp.close()
-        parsed = parse_csv(tmp.name)
+        parsed = parse_csv(io.BytesIO(raw))
     except Exception as e:
         logger.error("Upload parse failed: %s", e)
         return jsonify({"ok": False, "error": f"invalid CSV: {e}"}), 400
@@ -106,6 +118,7 @@ def api_upload():
     except Exception as e:
         logger.warning("Could not persist CSV to %s: %s", CSV_PATH, e)
     df = parsed
+    invalidate_cache()
     logger.info("Loaded %d transactions from upload %s", len(df), f.filename)
     return jsonify({"ok": True, "count": len(df), "filename": f.filename})
 
@@ -195,6 +208,7 @@ def api_knocked_down_toggle():
     else:
         ids.add(txn_id)
     KD_PATH.write_text(json.dumps({"ids": sorted(ids)}), encoding="utf-8")
+    invalidate_cache()
     return jsonify({"ok": True, "flagged": txn_id in ids})
 
 
