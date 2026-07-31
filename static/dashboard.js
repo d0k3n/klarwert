@@ -33,7 +33,7 @@ const TABLE_CONFIGS = {
   'product-results-table': {
     groupColumns: ['asset_class', 'status'],
     groupLabels: { asset_class: 'Asset Class', status: 'Status' },
-    numericFields: ['total_invested', 'total_realized_pl', 'total_dividends', 'total_fees', 'total_trades'],
+    numericFields: ['total_invested', 'total_realized_pl', 'total_dividends', 'total_dividend_tax', 'total_fees', 'total_trades'],
   },
   'derivative-executions-table': {
     groupColumns: ['asset_class', 'reconciled'],
@@ -250,7 +250,7 @@ function insertGroupDropdown(table, config, onChange) {
 
 function formatVal(key, val) {
   if (typeof val !== 'number') return val ?? '';
-  if (key === 'average_cost' || key.endsWith('_cost') || key === 'total_realized_pl' || key === 'total_invested' || key === 'total_dividends' || key === 'total_fees' || key === 'amount' || key === 'price' || key === 'ko_total' || key === 'warrant_return' || key === 'net_result') {
+  if (key === 'average_cost' || key.endsWith('_cost') || key === 'total_realized_pl' || key === 'total_invested' || key === 'total_dividends' || key === 'total_dividend_tax' || key === 'total_dividends_net' || key === 'total_fees' || key === 'amount' || key === 'price' || key === 'ko_total' || key === 'warrant_return' || key === 'net_result') {
     return `\u20AC${val.toLocaleString(undefined, {minimumFractionDigits: 2, maximumFractionDigits: 2})}`;
   }
   if (key === 'shares' || key === 'total_shares_sold') {
@@ -280,6 +280,7 @@ const cards = [
 { label: "Total Invested", value: s.total_invested, fmt: v => `\u20AC${v.toLocaleString()}` },
 { label: "Realized P&L", value: pl, fmt: v => `\u20AC${v.toLocaleString()}`, cls: (v) => v >= 0 ? "positive" : "negative" },
 { label: "Dividends", value: s.total_dividends, fmt: v => `\u20AC${v.toLocaleString()}` },
+{ label: "Dividend WHT", value: s.total_dividend_tax, fmt: v => `\u20AC${v.toLocaleString()}` },
 { label: "Interest", value: s.total_interest, fmt: v => `\u20AC${v.toLocaleString()}` },
 { label: "Fees", value: s.total_fees, fmt: v => `\u20AC${v.toLocaleString()}` },
 { label: "Card Spending", value: s.total_card_spending, fmt: v => `\u20AC${v.toLocaleString()}` },

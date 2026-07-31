@@ -14,6 +14,22 @@ class Lot:
     total_cost: float
 
 
+def _empty_product(isin, name, asset_class):
+    return {
+        "isin": isin,
+        "name": name,
+        "asset_class": asset_class,
+        "status": "closed",
+        "total_invested": 0.0,
+        "total_realized_pl": 0.0,
+        "total_dividends": 0.0,
+        "total_dividend_tax": 0.0,
+        "total_dividends_net": 0.0,
+        "total_fees": 0.0,
+        "total_trades": 0,
+    }
+
+
 def run_engine(df):
     trades = df[df["tx_type"].isin({"BUY", "SELL"})].sort_values("datetime").copy()
     cash_rows = df[~df["tx_type"].isin({"BUY", "SELL"})].copy()
@@ -216,6 +232,8 @@ def run_engine(df):
             "total_invested": round(total_invested, 2),
             "total_realized_pl": round(closed_positions[isin]["total_realized_pl"], 2),
             "total_dividends": 0.0,
+            "total_dividend_tax": 0.0,
+            "total_dividends_net": 0.0,
             "total_fees": round(total_fees, 2),
             "total_trades": total_trades,
         }
@@ -223,10 +241,19 @@ def run_engine(df):
     div_rows = cash_rows[cash_rows["tx_type"] == "DIVIDEND"]
     for _, row in div_rows.iterrows():
         isin = row["symbol"]
-        if isin in per_product:
-            per_product[isin]["total_dividends"] += abs(row["amount"])
+        if not isin:
+            continue
+        if isin not in per_product:
+            per_product[isin] = _empty_product(isin, row["name"], row["asset_class"])
+        gross = row["amount"] if not _isna(row["amount"]) else 0.0
+        wht = abs(row["tax"]) if not _isna(row["tax"]) else 0.0
+        per_product[isin]["total_dividends"] += gross
+        per_product[isin]["total_dividend_tax"] += wht
+        per_product[isin]["total_dividends_net"] += gross - wht
     for isin in per_product:
         per_product[isin]["total_dividends"] = round(per_product[isin]["total_dividends"], 2)
+        per_product[isin]["total_dividend_tax"] = round(per_product[isin]["total_dividend_tax"], 2)
+        per_product[isin]["total_dividends_net"] = round(per_product[isin]["total_dividends_net"], 2)
 
     total_realized_pl = sum(cp["total_realized_pl"] for cp in closed_positions.values())
 
@@ -240,12 +267,14 @@ def run_engine(df):
         2,
     )
 
-    by_class = defaultdict(lambda: {"total_invested": 0.0, "total_realized_pl": 0.0, "total_dividends": 0.0, "total_fees": 0.0, "count": 0})
+    by_class = defaultdict(lambda: {"total_invested": 0.0, "total_realized_pl": 0.0, "total_dividends": 0.0,
+                                    "total_dividend_tax": 0.0, "total_fees": 0.0, "count": 0})
     for p in per_product.values():
         ac = p["asset_class"]
         by_class[ac]["total_invested"] += p["total_invested"]
         by_class[ac]["total_realized_pl"] += p["total_realized_pl"]
         by_class[ac]["total_dividends"] += p["total_dividends"]
+        by_class[ac]["total_dividend_tax"] += p["total_dividend_tax"]
         by_class[ac]["total_fees"] += p["total_fees"]
         by_class[ac]["count"] += 1
     summary["by_asset_class"] = {k: {sk: round(sv, 2) for sk, sv in v.items()} for k, v in by_class.items()}
@@ -386,6 +415,7 @@ def _compute_summary(df, cash_rows):
     deposits = cash_rows[cash_rows["tx_type"] == "DEPOSIT"]["amount"].sum()
     withdrawals = abs(cash_rows[cash_rows["tx_type"] == "WITHDRAWAL"]["amount"].sum())
     dividends = cash_rows[cash_rows["tx_type"] == "DIVIDEND"]["amount"].sum()
+    dividend_tax = abs(cash_rows[cash_rows["tx_type"] == "DIVIDEND"]["tax"].dropna().sum())
     interest = cash_rows[cash_rows["tx_type"] == "INTEREST"]["amount"].sum()
     saveback = cash_rows[cash_rows["tx_type"] == "SAVEBACK"]["amount"].sum()
     fees = abs(cash_rows[cash_rows["tx_type"] == "FEE"]["amount"].sum()) + abs(df["fee"].dropna().sum())
@@ -400,6 +430,8 @@ def _compute_summary(df, cash_rows):
         "total_withdrawals": round(withdrawals, 2),
         "net_deposits": round(deposits - withdrawals, 2),
         "total_dividends": round(dividends, 2),
+        "total_dividend_tax": round(dividend_tax, 2),
+        "total_dividends_net": round(dividends - dividend_tax, 2),
         "total_interest": round(interest, 2),
         "total_saveback": round(saveback, 2),
         "total_fees": round(fees, 2),

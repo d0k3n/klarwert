@@ -511,3 +511,47 @@ def test_leftover_dust_written_off_at_last_event():
     assert len(result["closed_positions"]) == 1
     assert round(result["closed_positions"][0]["total_realized_pl"], 2) == -0.5
     assert result["monthly_pl"] == [{"month": "2025-06", "realized_pl": -0.5}]
+
+
+def test_dividend_withholding_tax_fields():
+    df = _make_df([
+        {"datetime": pd.Timestamp("2025-06-01", tz="UTC"), "tx_type": "BUY", "name": "ABC", "symbol": "US1",
+         "asset_class": "STOCK", "shares": 6.0, "price": 100.0, "amount": -600.0, "fee": 0.0, "tax": 0.0},
+        {"datetime": pd.Timestamp("2025-07-01", tz="UTC"), "tx_type": "DIVIDEND", "name": "ABC", "symbol": "US1",
+         "asset_class": "STOCK", "shares": 6.0, "price": 0.0, "amount": 1.14, "fee": 0.0, "tax": -0.17},
+    ])
+    result = run_engine(df)
+    p = result["products"][0]
+    assert p["total_dividends"] == 1.14
+    assert p["total_dividend_tax"] == 0.17
+    assert p["total_dividends_net"] == 0.97
+    s = result["summary"]
+    assert s["total_dividends"] == 1.14
+    assert s["total_dividend_tax"] == 0.17
+    assert s["total_dividends_net"] == 0.97
+
+
+def test_dividend_for_untraded_isin_creates_product():
+    df = _make_df([
+        {"datetime": pd.Timestamp("2025-07-01", tz="UTC"), "tx_type": "DIVIDEND", "name": "ORPHAN", "symbol": "XX",
+         "asset_class": "STOCK", "shares": 0.0, "price": 0.0, "amount": 5.0, "fee": 0.0, "tax": 0.0},
+    ])
+    result = run_engine(df)
+    assert len(result["products"]) == 1
+    p = result["products"][0]
+    assert p["isin"] == "XX"
+    assert p["total_dividends"] == 5.0
+    assert p["total_trades"] == 0
+
+
+def test_negative_dividend_adjustment_reduces_total():
+    df = _make_df([
+        {"datetime": pd.Timestamp("2025-06-01", tz="UTC"), "tx_type": "BUY", "name": "ABC", "symbol": "US1",
+         "asset_class": "STOCK", "shares": 6.0, "price": 100.0, "amount": -600.0, "fee": 0.0, "tax": 0.0},
+        {"datetime": pd.Timestamp("2025-07-01", tz="UTC"), "tx_type": "DIVIDEND", "name": "ABC", "symbol": "US1",
+         "asset_class": "STOCK", "shares": 0.0, "price": 0.0, "amount": 10.0, "fee": 0.0, "tax": 0.0},
+        {"datetime": pd.Timestamp("2025-08-01", tz="UTC"), "tx_type": "DIVIDEND", "name": "ABC", "symbol": "US1",
+         "asset_class": "STOCK", "shares": 0.0, "price": 0.0, "amount": -2.0, "fee": 0.0, "tax": 0.0},
+    ])
+    result = run_engine(df)
+    assert result["summary"]["total_dividends"] == 8.0
