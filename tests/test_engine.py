@@ -598,3 +598,21 @@ def test_reconciliation_balances_on_full_cycle():
     assert rec["open_positions_cost"] == 0.0
     assert rec["card_spending"] == 30.0
     assert abs(rec["difference"]) <= 0.01
+
+
+def test_reconciliation_captures_standalone_fee_column():
+    df = _make_df([
+        {"datetime": pd.Timestamp("2025-06-01", tz="UTC"), "tx_type": "DEPOSIT", "name": "", "symbol": "",
+         "asset_class": "", "shares": 0.0, "price": 0.0, "amount": 2000.0, "fee": 0.0, "tax": 0.0},
+        {"datetime": pd.Timestamp("2025-06-02", tz="UTC"), "tx_type": "BUY", "name": "X", "symbol": "X",
+         "asset_class": "STOCK", "shares": 10.0, "price": 50.0, "amount": -500.0, "fee": 1.0, "tax": 0.0},
+        {"datetime": pd.Timestamp("2025-06-03", tz="UTC"), "tx_type": "SELL", "name": "X", "symbol": "X",
+         "asset_class": "STOCK", "shares": 10.0, "price": 60.0, "amount": 600.0, "fee": 1.0, "tax": 0.0},
+        {"datetime": pd.Timestamp("2025-07-15", tz="UTC"), "tx_type": "FEE", "name": "TR", "symbol": "",
+         "asset_class": "", "shares": 0.0, "price": 0.0, "amount": 0.0, "fee": -5.0, "tax": 0.0},
+    ])
+    result = run_engine(df)
+    rec = result["summary"]["reconciliation"]
+    assert rec["cash_balance"] == 2093.0
+    assert rec["fees"] == 5.0
+    assert abs(rec["difference"]) <= 0.01
