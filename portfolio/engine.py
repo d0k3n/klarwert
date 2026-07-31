@@ -59,11 +59,14 @@ def run_engine(df):
         lot_id_gen = iter(range(1, 10**9))
         open_lots = []
 
+        last_dt = None
+
         events = [(row["datetime"], 0, row) for row in rows]
         events += [(r["datetime"], 1, r) for r in tilg_rows]
         events.sort(key=lambda e: (e[0], e[1]))
 
         for _, kind, row in events:
+            last_dt = row["datetime"]
             if kind == 1:
                 amount = 0.0 if _isna(row["amount"]) else abs(row["amount"])
                 cost = sum(l.total_cost for l in open_lots)
@@ -125,7 +128,7 @@ def run_engine(df):
                             monthly_pl[month] += -neg.total_cost
                             cp["total_realized_pl"] += -neg.total_cost
                             open_lots.pop(0)
-                    if to_allocate > 0.001:
+                    if to_allocate > 0:
                         ratio = to_allocate / shares
                         lot_cost = to_allocate * price + (fee + tax) * ratio
                         open_lots.append(Lot(id=next(lot_id_gen), shares=to_allocate,
@@ -148,7 +151,12 @@ def run_engine(df):
                     lot.shares -= used
                     remaining -= used
                     if lot.shares < 0.001:
+                        cost_basis_total += lot.total_cost
                         open_lots.pop(0)
+
+                if 0 < remaining <= 0.001:
+                    sell_proceeds += remaining * price
+                    remaining = 0.0
 
                 if remaining > 0.001:
                     if price > 0:
@@ -176,6 +184,16 @@ def run_engine(df):
                 if matched_shares > 0.001:
                     cp["closed_lots"] += 1
                     cp["total_shares_sold"] += matched_shares
+
+        dust_cost = sum(l.total_cost for l in open_lots if abs(l.shares) < 0.001)
+        open_lots = [l for l in open_lots if abs(l.shares) >= 0.001]
+        if abs(dust_cost) > 0 and last_dt is not None:
+            month = last_dt.strftime("%Y-%m")
+            monthly_pl[month] += -dust_cost
+            cp = closed_positions[isin]
+            cp["isin"] = isin
+            cp["name"] = name
+            cp["total_realized_pl"] += -dust_cost
 
         if open_lots:
             remaining_shares = sum(l.shares for l in open_lots)

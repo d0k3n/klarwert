@@ -486,3 +486,28 @@ def test_zero_price_unmatched_sell_leaves_no_short():
     ])
     result = run_engine(df)
     assert len(result["open_positions"]) == 0
+
+
+def test_dust_lot_cost_booked_on_sell():
+    df = _make_df([
+        {"datetime": pd.Timestamp("2025-06-01", tz="UTC"), "tx_type": "BUY", "name": "X", "symbol": "X",
+         "asset_class": "STOCK", "shares": 10.0005, "price": 100.0, "amount": -1000.05, "fee": 0.0, "tax": 0.0},
+        {"datetime": pd.Timestamp("2025-07-01", tz="UTC"), "tx_type": "SELL", "name": "X", "symbol": "X",
+         "asset_class": "STOCK", "shares": 10.0, "price": 100.0, "amount": 1000.0, "fee": 0.0, "tax": 0.0},
+    ])
+    result = run_engine(df)
+    assert len(result["open_positions"]) == 0
+    cp = result["closed_positions"][0]
+    assert round(cp["total_realized_pl"], 2) == -0.05
+
+
+def test_leftover_dust_written_off_at_last_event():
+    df = _make_df([
+        {"datetime": pd.Timestamp("2025-06-01", tz="UTC"), "tx_type": "BUY", "name": "X", "symbol": "X",
+         "asset_class": "STOCK", "shares": 0.0005, "price": 1000.0, "amount": -0.5, "fee": 0.0, "tax": 0.0},
+    ])
+    result = run_engine(df)
+    assert len(result["open_positions"]) == 0
+    assert len(result["closed_positions"]) == 1
+    assert round(result["closed_positions"][0]["total_realized_pl"], 2) == -0.5
+    assert result["monthly_pl"] == [{"month": "2025-06", "realized_pl": -0.5}]
