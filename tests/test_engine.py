@@ -368,3 +368,35 @@ def test_warrant_exercise_no_duplicate_shares_sold():
     cp = result["closed_positions"][0]
     assert cp["total_shares_sold"] == 100.0
     assert cp["closed_lots"] == 1
+
+
+def test_knocked_loss_booked_at_exercise_month():
+    df = _make_df([
+        {"datetime": pd.Timestamp("2025-01-15", tz="UTC"), "type": "BUY", "tx_type": "BUY",
+         "name": "TURBO", "symbol": "TURBO", "asset_class": "DERIVATIVE",
+         "shares": 100.0, "price": 5.0, "amount": -500.0, "fee": 2.0, "tax": 0.0,
+         "transaction_id": "b1", "knocked": True},
+        {"datetime": pd.Timestamp("2025-03-06", tz="UTC"), "type": "WARRANT_EXERCISE", "tx_type": "SELL",
+         "name": "TURBO", "symbol": "TURBO", "asset_class": "DERIVATIVE",
+         "shares": 100.0, "price": 0.0, "amount": 0.0, "fee": 0.0, "tax": 0.0,
+         "transaction_id": "we1"},
+    ])
+    result = run_engine(df)
+    assert len(result["monthly_pl"]) == 1
+    assert result["monthly_pl"][0]["month"] == "2025-03"
+    assert result["monthly_pl"][0]["realized_pl"] == round(-(100 * 5 + 2), 2)
+
+
+def test_knocked_loss_cross_year_goes_to_disposal_year():
+    df = _make_df([
+        {"datetime": pd.Timestamp("2025-12-20", tz="UTC"), "type": "BUY", "tx_type": "BUY",
+         "name": "TURBO", "symbol": "TURBO", "asset_class": "DERIVATIVE",
+         "shares": 100.0, "price": 5.0, "amount": -500.0, "fee": 0.0, "tax": 0.0,
+         "transaction_id": "b1", "knocked": True},
+        {"datetime": pd.Timestamp("2026-01-10", tz="UTC"), "type": "WARRANT_EXERCISE", "tx_type": "SELL",
+         "name": "TURBO", "symbol": "TURBO", "asset_class": "DERIVATIVE",
+         "shares": 100.0, "price": 0.0, "amount": 0.0, "fee": 0.0, "tax": 0.0,
+         "transaction_id": "we1"},
+    ])
+    result = run_engine(df)
+    assert result["monthly_pl"][0]["month"] == "2026-01"

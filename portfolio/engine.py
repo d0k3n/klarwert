@@ -18,6 +18,13 @@ def run_engine(df):
     trades = df[df["tx_type"].isin({"BUY", "SELL"})].sort_values("datetime").copy()
     cash_rows = df[~df["tx_type"].isin({"BUY", "SELL"})].copy()
 
+    we_dates = {}
+    if "type" in df.columns:
+        for _, r in df[df["type"] == "WARRANT_EXERCISE"].iterrows():
+            d = r["datetime"]
+            if r["symbol"] not in we_dates or d < we_dates[r["symbol"]]:
+                we_dates[r["symbol"]] = d
+
     by_isin = defaultdict(list)
     for _, row in trades.iterrows():
         by_isin[row["symbol"]].append(row)
@@ -54,7 +61,8 @@ def run_engine(df):
 
                 if row.get("knocked") is True:
                     realized_pl = -lot.total_cost
-                    month = row["datetime"].strftime("%Y-%m")
+                    ko_dt = we_dates.get(isin, row["datetime"])
+                    month = ko_dt.strftime("%Y-%m")
                     monthly_pl[month] += realized_pl
                     cp = closed_positions[isin]
                     cp["isin"] = isin
