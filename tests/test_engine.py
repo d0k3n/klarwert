@@ -1,5 +1,5 @@
 import pandas as pd
-from portfolio.engine import run_engine, auto_detect_knocked
+from portfolio.engine import run_engine, auto_detect_knocked, compute_derivative_executions
 
 
 def _make_df(rows):
@@ -555,3 +555,21 @@ def test_negative_dividend_adjustment_reduces_total():
     ])
     result = run_engine(df)
     assert result["summary"]["total_dividends"] == 8.0
+
+
+def test_derivative_executions_include_buy_tax():
+    df = _make_df([
+        {"datetime": pd.Timestamp("2025-06-01", tz="UTC"), "type": "BUY", "tx_type": "BUY",
+         "name": "TURBO", "symbol": "TURBO", "asset_class": "DERIVATIVE",
+         "shares": 10.0, "price": 50.0, "amount": -500.0, "fee": 2.0, "tax": 1.0,
+         "transaction_id": "b1", "knocked": True},
+    ])
+    entries = compute_derivative_executions(df, {"b1"})
+    assert len(entries) == 1
+    e = entries[0]
+    assert e["ko_loss"] == -500.0
+    assert e["ko_fees"] == -2.0
+    assert e["ko_tax"] == -1.0
+    assert e["ko_total"] == -503.0
+    eng = run_engine(df)
+    assert round(eng["closed_positions"][0]["total_realized_pl"], 2) == e["ko_total"]

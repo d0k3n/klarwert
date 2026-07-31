@@ -311,7 +311,7 @@ def compute_derivative_executions(df, knocked_ids):
         isin = row["symbol"]
         if isin not in by_isin:
             by_isin[isin] = {"name": row["name"], "isin": isin, "asset_class": "DERIVATIVE",
-                             "ko_quantity": 0.0, "ko_loss": 0.0, "ko_fees": 0.0,
+                             "ko_quantity": 0.0, "ko_loss": 0.0, "ko_fees": 0.0, "ko_tax": 0.0,
                              "warrant_quantity": 0.0, "warrant_return": 0.0}
         if row.get("transaction_id") in knocked_ids:
             entry = by_isin[isin]
@@ -320,12 +320,14 @@ def compute_derivative_executions(df, knocked_ids):
             fee = abs(row["fee"]) if not _isna(row["fee"]) else 0.0
             entry["ko_loss"] += -(row["shares"] * price)
             entry["ko_fees"] += -fee
+            tax = abs(row["tax"]) if not _isna(row["tax"]) else 0.0
+            entry["ko_tax"] += -tax
 
     for _, row in warrant_ex.iterrows():
         isin = row["symbol"]
         if isin not in by_isin:
             by_isin[isin] = {"name": row["name"], "isin": isin, "asset_class": "DERIVATIVE",
-                             "ko_quantity": 0.0, "ko_loss": 0.0, "ko_fees": 0.0,
+                             "ko_quantity": 0.0, "ko_loss": 0.0, "ko_fees": 0.0, "ko_tax": 0.0,
                              "warrant_quantity": 0.0, "warrant_return": 0.0}
         by_isin[isin]["warrant_quantity"] += abs(row["shares"])
 
@@ -333,7 +335,7 @@ def compute_derivative_executions(df, knocked_ids):
         isin = row["symbol"]
         if isin not in by_isin:
             by_isin[isin] = {"name": row["name"], "isin": isin, "asset_class": "DERIVATIVE",
-                             "ko_quantity": 0.0, "ko_loss": 0.0, "ko_fees": 0.0,
+                             "ko_quantity": 0.0, "ko_loss": 0.0, "ko_fees": 0.0, "ko_tax": 0.0,
                              "warrant_quantity": 0.0, "warrant_return": 0.0}
         if not _isna(row["amount"]):
             by_isin[isin]["warrant_return"] += abs(row["amount"])
@@ -344,7 +346,8 @@ def compute_derivative_executions(df, knocked_ids):
             continue
         entry["ko_loss"] = round(entry["ko_loss"], 2)
         entry["ko_fees"] = round(entry["ko_fees"], 2)
-        entry["ko_total"] = round(entry["ko_loss"] + entry["ko_fees"], 2)
+        entry["ko_tax"] = round(entry["ko_tax"], 2)
+        entry["ko_total"] = round(entry["ko_loss"] + entry["ko_fees"] + entry["ko_tax"], 2)
         entry["warrant_return"] = round(entry["warrant_return"], 2)
         entry["net_result"] = round(entry["ko_total"] + entry["warrant_return"], 2)
         entry["reconciled"] = abs(entry["ko_quantity"] - entry["warrant_quantity"]) < 0.01
