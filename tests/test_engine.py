@@ -444,3 +444,45 @@ def test_tilg_only_isin_appears_in_closed_positions():
     assert len(result["closed_positions"]) == 1
     assert result["closed_positions"][0]["total_realized_pl"] == 25.0
     assert result["monthly_pl"] == [{"month": "2025-06", "realized_pl": 25.0}]
+
+
+def test_unmatched_sell_creates_short_position():
+    df = _make_df([
+        {"datetime": pd.Timestamp("2025-06-01", tz="UTC"), "tx_type": "SELL", "name": "X", "symbol": "X",
+         "asset_class": "STOCK", "shares": 10.0, "price": 60.0, "amount": 600.0, "fee": 0.0, "tax": 0.0},
+    ])
+    result = run_engine(df)
+    assert len(result["open_positions"]) == 1
+    op = result["open_positions"][0]
+    assert round(op["shares"], 4) == -10.0
+    assert round(op["total_cost"], 2) == -600.0
+    assert len(result["closed_positions"]) == 0
+    assert result["summary"]["total_realized_pl"] == 0.0
+
+
+def test_short_covered_by_later_buy():
+    df = _make_df([
+        {"datetime": pd.Timestamp("2025-06-01", tz="UTC"), "tx_type": "SELL", "name": "X", "symbol": "X",
+         "asset_class": "STOCK", "shares": 10.0, "price": 60.0, "amount": 600.0, "fee": 0.0, "tax": 0.0},
+        {"datetime": pd.Timestamp("2025-07-01", tz="UTC"), "tx_type": "BUY", "name": "X", "symbol": "X",
+         "asset_class": "STOCK", "shares": 10.0, "price": 50.0, "amount": -500.0, "fee": 0.0, "tax": 0.0},
+    ])
+    result = run_engine(df)
+    assert len(result["open_positions"]) == 0
+    assert len(result["closed_positions"]) == 1
+    cp = result["closed_positions"][0]
+    assert round(cp["total_realized_pl"], 2) == 100.0
+    assert cp["total_shares_sold"] == 10.0
+    assert result["monthly_pl"] == [{"month": "2025-07", "realized_pl": 100.0}]
+
+
+def test_zero_price_unmatched_sell_leaves_no_short():
+    df = _make_df([
+        {"datetime": pd.Timestamp("2025-06-01", tz="UTC"), "tx_type": "BUY", "name": "T", "symbol": "T",
+         "asset_class": "DERIVATIVE", "shares": 100.0, "price": 1.5, "amount": -150.0, "fee": 1.0, "tax": 0.0,
+         "knocked": True},
+        {"datetime": pd.Timestamp("2025-06-15", tz="UTC"), "tx_type": "SELL", "name": "T", "symbol": "T",
+         "asset_class": "DERIVATIVE", "shares": 100.0, "price": 0.0, "amount": 0.0, "fee": 0.0, "tax": 0.0},
+    ])
+    result = run_engine(df)
+    assert len(result["open_positions"]) == 0

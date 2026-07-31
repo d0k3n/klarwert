@@ -90,9 +90,9 @@ def run_engine(df):
                 total_invested += shares * price
                 total_fees += fee
                 total_trades += 1
-                lot = Lot(id=next(lot_id_gen), shares=shares, price=price, total_cost=total_cost)
 
                 if row.get("knocked") is True:
+                    lot = Lot(id=next(lot_id_gen), shares=shares, price=price, total_cost=total_cost)
                     realized_pl = -lot.total_cost
                     ko_dt = we_dates.get(isin, row["datetime"])
                     month = ko_dt.strftime("%Y-%m")
@@ -104,7 +104,32 @@ def run_engine(df):
                     cp["closed_lots"] += 1
                     cp["total_shares_sold"] += shares
                 else:
-                    open_lots.append(lot)
+                    to_allocate = shares
+                    while to_allocate > 0.001 and open_lots and open_lots[0].shares < 0:
+                        neg = open_lots[0]
+                        covered = min(to_allocate, -neg.shares)
+                        proceeds_portion = -neg.total_cost * (covered / -neg.shares)
+                        cover_pl = proceeds_portion - covered * price
+                        month = row["datetime"].strftime("%Y-%m")
+                        monthly_pl[month] += cover_pl
+                        cp = closed_positions[isin]
+                        cp["isin"] = isin
+                        cp["name"] = name
+                        cp["total_realized_pl"] += cover_pl
+                        cp["closed_lots"] += 1
+                        cp["total_shares_sold"] += covered
+                        neg.shares += covered
+                        neg.total_cost += proceeds_portion
+                        to_allocate -= covered
+                        if -neg.shares < 0.001:
+                            monthly_pl[month] += -neg.total_cost
+                            cp["total_realized_pl"] += -neg.total_cost
+                            open_lots.pop(0)
+                    if to_allocate > 0.001:
+                        ratio = to_allocate / shares
+                        lot_cost = to_allocate * price + (fee + tax) * ratio
+                        open_lots.append(Lot(id=next(lot_id_gen), shares=to_allocate,
+                                             price=price, total_cost=lot_cost))
 
             elif row["tx_type"] == "SELL":
                 total_fees += fee
@@ -113,7 +138,7 @@ def run_engine(df):
                 sell_proceeds = 0.0
                 cost_basis_total = 0.0
 
-                while remaining > 0.001 and open_lots:
+                while remaining > 0.001 and open_lots and open_lots[0].shares > 0:
                     lot = open_lots[0]
                     used = min(remaining, lot.shares)
                     ratio = used / lot.shares
@@ -126,16 +151,23 @@ def run_engine(df):
                         open_lots.pop(0)
 
                 if remaining > 0.001:
-                    logger.warning(
-                        "SELL %s exceeds bought quantity: %.4f shares unmatched",
-                        isin, remaining,
-                    )
-                    sell_proceeds += remaining * price
-                    cost_basis_total += 0.0
+                    if price > 0:
+                        logger.warning(
+                            "SELL %s exceeds bought quantity: %.4f shares tracked as short",
+                            isin, remaining,
+                        )
+                        open_lots.append(Lot(id=next(lot_id_gen), shares=-remaining,
+                                             price=price, total_cost=-(remaining * price)))
+                    else:
+                        logger.info(
+                            "SELL %s: %.4f unmatched shares at zero price (expiration), ignored",
+                            isin, remaining,
+                        )
 
                 realized_pl = sell_proceeds - cost_basis_total - fee - tax
                 month = row["datetime"].strftime("%Y-%m")
-                monthly_pl[month] += realized_pl
+                if realized_pl != 0:
+                    monthly_pl[month] += realized_pl
                 cp = closed_positions[isin]
                 cp["isin"] = isin
                 cp["name"] = name
@@ -148,7 +180,7 @@ def run_engine(df):
         if open_lots:
             remaining_shares = sum(l.shares for l in open_lots)
             total_cost_basis = sum(l.total_cost for l in open_lots)
-            avg_cost = total_cost_basis / remaining_shares if remaining_shares > 0 else 0.0
+            avg_cost = total_cost_basis / remaining_shares if abs(remaining_shares) > 0 else 0.0
             open_positions.append({
                 "isin": isin,
                 "name": name,
