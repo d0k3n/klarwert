@@ -43,7 +43,8 @@ def run_engine(df):
             shares = row["shares"]
             price = abs(row["price"]) if not _isna(row["price"]) else 0.0
             fee = abs(row["fee"]) if not _isna(row["fee"]) else 0.0
-            total_cost = shares * price + fee
+            tax = abs(row["tax"]) if not _isna(row["tax"]) else 0.0
+            total_cost = shares * price + fee + tax
 
             if row["tx_type"] == "BUY":
                 total_invested += shares * price
@@ -91,15 +92,26 @@ def run_engine(df):
                     sell_proceeds += remaining * price
                     cost_basis_total += 0.0
 
-                realized_pl = sell_proceeds - cost_basis_total
+                realized_pl = sell_proceeds - cost_basis_total - fee - tax
                 month = row["datetime"].strftime("%Y-%m")
                 monthly_pl[month] += realized_pl
                 cp = closed_positions[isin]
                 cp["isin"] = isin
                 cp["name"] = name
                 cp["total_realized_pl"] += realized_pl
-                cp["closed_lots"] += 1
-                cp["total_shares_sold"] += shares
+                matched_shares = shares - remaining
+                if matched_shares > 0.001:
+                    cp["closed_lots"] += 1
+                    cp["total_shares_sold"] += matched_shares
+
+        tilg_mask = (cash_rows["tx_type"] == "TILG") & (cash_rows["symbol"] == isin)
+        for _, tilg_row in cash_rows[tilg_mask].iterrows():
+            if not _isna(tilg_row["amount"]):
+                amount = abs(tilg_row["amount"])
+                month = tilg_row["datetime"].strftime("%Y-%m")
+                monthly_pl[month] += amount
+                cp = closed_positions[isin]
+                cp["total_realized_pl"] += amount
 
         if open_lots:
             remaining_shares = sum(l.shares for l in open_lots)
@@ -138,6 +150,23 @@ def run_engine(df):
 
     summary = _compute_summary(df, cash_rows)
     summary["total_realized_pl"] = round(total_realized_pl, 2)
+    summary["total_income"] = round(
+        total_realized_pl
+        + summary["total_dividends"]
+        + summary["total_interest"]
+        + summary["total_saveback"],
+        2,
+    )
+
+    by_class = defaultdict(lambda: {"total_invested": 0.0, "total_realized_pl": 0.0, "total_dividends": 0.0, "total_fees": 0.0, "count": 0})
+    for p in per_product.values():
+        ac = p["asset_class"]
+        by_class[ac]["total_invested"] += p["total_invested"]
+        by_class[ac]["total_realized_pl"] += p["total_realized_pl"]
+        by_class[ac]["total_dividends"] += p["total_dividends"]
+        by_class[ac]["total_fees"] += p["total_fees"]
+        by_class[ac]["count"] += 1
+    summary["by_asset_class"] = {k: {sk: round(sv, 2) for sk, sv in v.items()} for k, v in by_class.items()}
 
     cash_flow = _compute_cash_flow(cash_rows)
     transactions = _get_recent_transactions(trades)
@@ -153,6 +182,117 @@ def run_engine(df):
     }
 
 
+def compute_derivative_executions(df, knocked_ids):
+    deriv = df[df["asset_class"] == "DERIVATIVE"].copy()
+    if deriv.empty:
+        return []
+
+    buys = deriv[deriv["tx_type"] == "BUY"]
+    warrant_ex = deriv[deriv["type"] == "WARRANT_EXERCISE"]
+    tilg = deriv[deriv["tx_type"] == "TILG"]
+
+    by_isin = {}
+
+    for _, row in buys.iterrows():
+        isin = row["symbol"]
+        if isin not in by_isin:
+            by_isin[isin] = {"name": row["name"], "isin": isin, "asset_class": "DERIVATIVE",
+                             "ko_quantity": 0.0, "ko_loss": 0.0, "ko_fees": 0.0,
+                             "warrant_quantity": 0.0, "warrant_return": 0.0}
+        if row.get("transaction_id") in knocked_ids:
+            entry = by_isin[isin]
+            entry["ko_quantity"] += row["shares"]
+            price = abs(row["price"]) if not _isna(row["price"]) else 0.0
+            fee = abs(row["fee"]) if not _isna(row["fee"]) else 0.0
+            entry["ko_loss"] += -(row["shares"] * price)
+            entry["ko_fees"] += -fee
+
+    for _, row in warrant_ex.iterrows():
+        isin = row["symbol"]
+        if isin not in by_isin:
+            by_isin[isin] = {"name": row["name"], "isin": isin, "asset_class": "DERIVATIVE",
+                             "ko_quantity": 0.0, "ko_loss": 0.0, "ko_fees": 0.0,
+                             "warrant_quantity": 0.0, "warrant_return": 0.0}
+        by_isin[isin]["warrant_quantity"] += abs(row["shares"])
+
+    for _, row in tilg.iterrows():
+        isin = row["symbol"]
+        if isin not in by_isin:
+            by_isin[isin] = {"name": row["name"], "isin": isin, "asset_class": "DERIVATIVE",
+                             "ko_quantity": 0.0, "ko_loss": 0.0, "ko_fees": 0.0,
+                             "warrant_quantity": 0.0, "warrant_return": 0.0}
+        if not _isna(row["amount"]):
+            by_isin[isin]["warrant_return"] += abs(row["amount"])
+
+    result = []
+    for entry in by_isin.values():
+        if entry["ko_quantity"] == 0 and entry["warrant_quantity"] == 0 and entry["warrant_return"] == 0:
+            continue
+        entry["ko_loss"] = round(entry["ko_loss"], 2)
+        entry["ko_fees"] = round(entry["ko_fees"], 2)
+        entry["ko_total"] = round(entry["ko_loss"] + entry["ko_fees"], 2)
+        entry["warrant_return"] = round(entry["warrant_return"], 2)
+        entry["net_result"] = round(entry["ko_total"] + entry["warrant_return"], 2)
+        entry["reconciled"] = abs(entry["ko_quantity"] - entry["warrant_quantity"]) < 0.01
+        result.append(entry)
+
+    return sorted(result, key=lambda x: x["name"])
+
+
+def auto_detect_knocked(df):
+    deriv = df[df["asset_class"] == "DERIVATIVE"].copy()
+    if deriv.empty:
+        return set()
+
+    buys = deriv[deriv["tx_type"] == "BUY"].copy()
+    regular_sells = deriv[(deriv["tx_type"] == "SELL") & (deriv["type"] != "WARRANT_EXERCISE")].copy()
+    warrant_ex = deriv[deriv["type"] == "WARRANT_EXERCISE"].copy()
+
+    auto_ids = set()
+
+    for isin in deriv["symbol"].unique():
+        isin_buys = buys[buys["symbol"] == isin]
+        isin_we = warrant_ex[warrant_ex["symbol"] == isin]
+        if isin_we.empty:
+            continue
+
+        total_we = isin_we["shares"].sum()
+
+        lots = [[row["shares"], row["transaction_id"]] for _, row in isin_buys.iterrows()]
+
+        for _, sell_row in regular_sells[regular_sells["symbol"] == isin].iterrows():
+            remaining = sell_row["shares"]
+            while remaining > 0.001 and lots:
+                lot = lots[0]
+                used = min(remaining, lot[0])
+                lot[0] -= used
+                remaining -= used
+                if lot[0] < 0.001:
+                    lots.pop(0)
+
+        remaining_shares = sum(lot[0] for lot in lots)
+
+        if abs(remaining_shares - total_we) < 0.01:
+            for lot in lots:
+                auto_ids.add(lot[1])
+
+    return auto_ids
+
+
+def compute_card_transactions(df):
+    card = df[df["tx_type"] == "CARD"].sort_values("datetime", ascending=False).copy()
+    result = []
+    for _, row in card.iterrows():
+        result.append({
+            "id": row.get("transaction_id", ""),
+            "datetime": row["datetime"].isoformat(),
+            "name": row["name"],
+            "amount": round(abs(row["amount"]), 2) if not _isna(row["amount"]) else None,
+            "description": row.get("description", ""),
+        })
+    return result
+
+
 def _isna(val):
     return val is None or (isinstance(val, float) and math.isnan(val))
 
@@ -162,6 +302,7 @@ def _compute_summary(df, cash_rows):
     withdrawals = abs(cash_rows[cash_rows["tx_type"] == "WITHDRAWAL"]["amount"].sum())
     dividends = cash_rows[cash_rows["tx_type"] == "DIVIDEND"]["amount"].sum()
     interest = cash_rows[cash_rows["tx_type"] == "INTEREST"]["amount"].sum()
+    saveback = cash_rows[cash_rows["tx_type"] == "SAVEBACK"]["amount"].sum()
     fees = abs(cash_rows[cash_rows["tx_type"] == "FEE"]["amount"].sum()) + abs(df["fee"].dropna().sum())
     card_spending = abs(cash_rows[cash_rows["tx_type"] == "CARD"]["amount"].sum())
 
@@ -175,6 +316,7 @@ def _compute_summary(df, cash_rows):
         "net_deposits": round(deposits - withdrawals, 2),
         "total_dividends": round(dividends, 2),
         "total_interest": round(interest, 2),
+        "total_saveback": round(saveback, 2),
         "total_fees": round(fees, 2),
         "total_card_spending": round(card_spending, 2),
         "total_invested": round(invested, 2),

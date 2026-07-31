@@ -8,6 +8,15 @@
 <script src="/static/vendor/chart.umd.min.js"></script>
 </head>
 <body>
+<div id="license-overlay" style="display:none; position:fixed; inset:0; z-index:1000; background:#0f172a; color:#e2e8f0; font-family:system-ui, sans-serif; display:flex; align-items:center; justify-content:center;">
+  <div style="max-width:420px; width:90%; text-align:center; padding:32px; background:#1e293b; border-radius:12px; box-shadow:0 10px 40px rgba(0,0,0,0.5);">
+    <h2 style="margin-top:0;">Activate Trade Republic Analyzer</h2>
+    <p style="color:#94a3b8; font-size:0.95em;">Enter the license key you received after purchase to continue.</p>
+    <input id="license-key" type="text" placeholder="XXXX-XXXX-XXXX-XXXX" style="width:100%; box-sizing:border-box; padding:12px; margin:12px 0; border-radius:8px; border:1px solid #334155; background:#0f172a; color:#e2e8f0; font-size:1em;">
+    <button id="license-activate-btn" onclick="window.activateLicense()" style="width:100%; padding:12px; border:none; border-radius:8px; background:#2563eb; color:#fff; font-size:1em; cursor:pointer;">Activate</button>
+    <div id="license-status" style="margin-top:12px; font-size:0.9em; min-height:1.2em;"></div>
+  </div>
+</div>
 <div class="page-header">
   <div class="header-left">
     <h1>Portfolio Analysis</h1>
@@ -19,7 +28,14 @@
     <span id="reload-status"></span>
   </div>
 </div>
-<button id="load-btn" onclick="document.getElementById('csv-input').click()">&#x1F4C2; Load CSV</button>
+<button id="load-btn" onclick="document.getElementById('csv-input').click()">
+  <svg class="btn-icon" viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+    <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/>
+    <polyline points="17 8 12 3 7 8"/>
+    <line x1="12" y1="3" x2="12" y2="15"/>
+  </svg>
+  <span>Load CSV</span>
+</button>
 <input id="csv-input" type="file" accept=".csv" style="display:none" onchange="window.uploadCSV(this)">
 
 <div id="empty-state" style="display:none; margin:24px 0; padding:20px; border:1px dashed #cbd5e1; border-radius:8px; background:#f8fafc;">
@@ -154,7 +170,6 @@
           <th data-sort="shares" class="num">Shares</th>
           <th data-sort="price" class="num">Price</th>
           <th data-sort="amount" class="num">Amount</th>
-          <th class="knocked-col">Knocked?</th>
          </tr></thead>
 <tbody></tbody>
 </table>

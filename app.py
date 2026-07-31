@@ -1,25 +1,43 @@
 import sys
+import os
 import json
+import tempfile
 import logging
 from pathlib import Path
 
 from flask import Flask, jsonify, request, send_from_directory
 
 from portfolio.parser import parse_csv
-from portfolio.engine import run_engine
+from portfolio.engine import run_engine, compute_derivative_executions, compute_card_transactions, auto_detect_knocked
+import licensing as license_module
 
 logging.basicConfig(level=logging.INFO, format="%(levelname)s: %(message)s")
 logger = logging.getLogger(__name__)
 
-CSV_PATH = Path(__file__).parent / "transactions.csv"
-KD_PATH = Path(__file__).parent / "knocked_down.json"
 
-if not CSV_PATH.exists():
-    logger.error("transactions.csv not found at %s", CSV_PATH)
-    sys.exit(1)
+def resource_path(rel):
+    base = getattr(sys, "_MEIPASS", None) or str(Path(__file__).parent)
+    return str(Path(base) / rel)
 
-df = parse_csv(str(CSV_PATH))
-logger.info("Loaded %d transactions from %s", len(df), CSV_PATH)
+
+if getattr(sys, "_MEIPASS", None):
+    BASE_DIR = Path(os.environ.get("APPDATA", Path.home())) / "TradeRepublicAnalyzer"
+    BASE_DIR.mkdir(parents=True, exist_ok=True)
+else:
+    BASE_DIR = Path(__file__).parent
+
+CSV_PATH = BASE_DIR / "transactions.csv"
+KD_PATH = BASE_DIR / "knocked_down.json"
+
+df = None
+if CSV_PATH.exists():
+    try:
+        df = parse_csv(str(CSV_PATH))
+        logger.info("Loaded %d transactions from %s", len(df), CSV_PATH)
+    except Exception as e:
+        logger.error("Failed to load %s: %s", CSV_PATH, e)
+else:
+    logger.warning("No transactions.csv found; waiting for CSV upload.")
 
 
 def load_knocked_ids():
@@ -29,18 +47,36 @@ def load_knocked_ids():
 
 
 def compute_data(flagged_ids=None):
+    if df is None:
+        return EMPTY_RESULT
     d = df.copy()
-    if flagged_ids:
-        d["knocked"] = (d["tx_type"] == "BUY") & (d["transaction_id"].isin(flagged_ids))
+    flagged = set(flagged_ids or ())
+    auto = auto_detect_knocked(d)
+    merged = flagged | auto
+    if merged:
+        d["knocked"] = (d["tx_type"] == "BUY") & (d["transaction_id"].isin(merged))
     return run_engine(d)
 
 
-app = Flask(__name__)
+EMPTY_RESULT = {
+    "summary": {},
+    "open_positions": [],
+    "closed_positions": [],
+    "cash_flow": [],
+    "transactions": [],
+    "products": [],
+    "monthly_pl": [],
+}
+
+
+app = Flask(__name__, template_folder=resource_path("templates"), static_folder=resource_path("static"))
 
 
 @app.route("/api/reload", methods=["POST"])
 def api_reload():
     global df
+    if not CSV_PATH.exists():
+        return jsonify({"ok": False, "error": "no CSV loaded"}), 400
     try:
         df = parse_csv(str(CSV_PATH))
         logger.info("Reloaded %d transactions from %s", len(df), CSV_PATH)
@@ -50,9 +86,61 @@ def api_reload():
         return jsonify({"ok": False, "error": str(e)}), 500
 
 
+@app.route("/api/upload", methods=["POST"])
+def api_upload():
+    global df
+    f = request.files.get("file")
+    if not f or not f.filename:
+        return jsonify({"ok": False, "error": "no file provided"}), 400
+    try:
+        raw = f.read()
+        tmp = tempfile.NamedTemporaryFile(suffix=".csv", delete=False, mode="wb")
+        tmp.write(raw)
+        tmp.close()
+        parsed = parse_csv(tmp.name)
+    except Exception as e:
+        logger.error("Upload parse failed: %s", e)
+        return jsonify({"ok": False, "error": f"invalid CSV: {e}"}), 400
+    try:
+        CSV_PATH.write_bytes(raw)
+    except Exception as e:
+        logger.warning("Could not persist CSV to %s: %s", CSV_PATH, e)
+    df = parsed
+    logger.info("Loaded %d transactions from upload %s", len(df), f.filename)
+    return jsonify({"ok": True, "count": len(df), "filename": f.filename})
+
+
+@app.route("/api/status")
+def api_status():
+    return jsonify({"loaded": df is not None, "count": len(df) if df is not None else 0})
+
+
+@app.route("/api/license/status")
+def api_license_status():
+    return jsonify({"activated": license_module.is_activated()})
+
+
+@app.route("/api/license/activate", methods=["POST"])
+def api_license_activate():
+    body = request.get_json(silent=True) or {}
+    key = (body.get("key") or "").strip()
+    if not key:
+        return jsonify({"ok": False, "error": "missing license key"}), 400
+    result = license_module.activate(key)
+    if not result["ok"]:
+        return jsonify(result), 400
+    return jsonify(result)
+
+
+@app.route("/api/license/deactivate", methods=["POST"])
+def api_license_deactivate():
+    license_module.deactivate()
+    return jsonify({"ok": True})
+
+
 @app.route("/")
 def index():
-    return send_from_directory("templates", "index.html")
+    return send_from_directory(resource_path("templates"), "index.html")
 
 
 @app.route("/api/summary")
@@ -108,6 +196,23 @@ def api_knocked_down_toggle():
         ids.add(txn_id)
     KD_PATH.write_text(json.dumps({"ids": sorted(ids)}), encoding="utf-8")
     return jsonify({"ok": True, "flagged": txn_id in ids})
+
+
+@app.route("/api/card_transactions")
+def api_card_transactions():
+    if df is None:
+        return jsonify([])
+    return jsonify(compute_card_transactions(df))
+
+
+@app.route("/api/derivative_executions")
+def api_derivative_executions():
+    if df is None:
+        return jsonify([])
+    manual = load_knocked_ids()
+    auto = auto_detect_knocked(df)
+    merged = manual | auto
+    return jsonify(compute_derivative_executions(df, merged))
 
 
 if __name__ == "__main__":

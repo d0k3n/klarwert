@@ -13,7 +13,6 @@ if (!r.ok) throw new Error(`HTTP ${r.status} ${url}`);
 return r.json();
 }
 
-let knockedIds = new Set();
 let cashFlowChart = null;
 let monthlyPLChart = null;
 let allocationChart = null;
@@ -54,20 +53,17 @@ const TABLE_CONFIGS = {
 };
 
 async function loadAllData() {
-const [summary, openPositions, closedPositions, cashFlow, transactions, knockedDown, products, monthlyPl, derivativeExecutions, cardTransactions] = await Promise.all([
+const [summary, openPositions, closedPositions, cashFlow, transactions, products, monthlyPl, derivativeExecutions, cardTransactions] = await Promise.all([
 loadJSON(`${BASE}/api/summary`),
 loadJSON(`${BASE}/api/open_positions`),
 loadJSON(`${BASE}/api/closed_positions`),
 loadJSON(`${BASE}/api/cash_flow`),
 loadJSON(`${BASE}/api/transactions`),
-loadJSON(`${BASE}/api/knocked_down`),
 loadJSON(`${BASE}/api/products`),
 loadJSON(`${BASE}/api/monthly_pl`),
 loadJSON(`${BASE}/api/derivative_executions`),
 loadJSON(`${BASE}/api/card_transactions`),
 ]);
-
-knockedIds = new Set(knockedDown.ids);
 
 const empty = !summary || Object.keys(summary).length === 0;
 document.getElementById("empty-state").style.display = empty ? "block" : "none";
@@ -79,7 +75,7 @@ renderSummaryByAssetClass(summary);
 renderTable("open-positions-table", openPositions, TABLE_CONFIGS['open-positions-table']);
 renderTable("closed-positions-table", closedPositions, TABLE_CONFIGS['closed-positions-table']);
 renderCashFlowChart(cashFlow);
-renderTransactions(transactions, knockedIds);
+renderTransactions(transactions);
 renderMonthlyPLChart(monthlyPl);
 renderTable("product-results-table", products, TABLE_CONFIGS['product-results-table']);
 renderAllocationChart(openPositions);
@@ -124,7 +120,45 @@ input.value = "";
 }
 };
 
-(async () => { await loadAllData(); })();
+window.activateLicense = async function () {
+  const input = document.getElementById("license-key");
+  const status = document.getElementById("license-status");
+  const btn = document.getElementById("license-activate-btn");
+  const key = input.value.trim();
+  if (!key) { status.textContent = "Please enter your license key."; return; }
+  btn.disabled = true;
+  status.textContent = "Activating...";
+  try {
+    const r = await fetch(`${BASE}/api/license/activate`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ key }),
+    });
+    const data = await r.json();
+    if (!data.ok) throw new Error(data.error || "activation failed");
+    document.getElementById("license-overlay").style.display = "none";
+    await loadAllData();
+  } catch (e) {
+    status.textContent = `Failed: ${e.message}`;
+  } finally {
+    btn.disabled = false;
+  }
+};
+
+(async () => {
+  try {
+    const r = await fetch(`${BASE}/api/license/status`);
+    const data = await r.json();
+    if (data.activated) {
+      document.getElementById("license-overlay").style.display = "none";
+      await loadAllData();
+    } else {
+      document.getElementById("license-overlay").style.display = "flex";
+    }
+  } catch (e) {
+    document.getElementById("license-overlay").style.display = "flex";
+  }
+})();
 
 function groupData(data, groupBy, numericFields, averageFields) {
   const groups = {};
@@ -226,9 +260,25 @@ function formatVal(key, val) {
 }
 
 function renderSummary(s) {
+const pl = s.total_realized_pl || 0;
+const spending = s.total_card_spending || 0;
+let coverage, coverageCls;
+if (pl <= 0) {
+coverage = "N/A";
+coverageCls = "";
+} else if (spending === 0) {
+coverage = "100%";
+coverageCls = "positive";
+} else {
+const pct = Math.min(100, spending / pl * 100);
+coverage = `${pct.toFixed(1)}%`;
+coverageCls = pct >= 100 ? "positive" : "negative";
+}
+
 const cards = [
+{ label: "Expenses covered by P/L", value: coverage, fmt: v => v, cls: () => coverageCls },
 { label: "Total Invested", value: s.total_invested, fmt: v => `\u20AC${v.toLocaleString()}` },
-{ label: "Realized P&L", value: s.total_realized_pl || 0, fmt: v => `\u20AC${v.toLocaleString()}`, cls: (v) => v >= 0 ? "positive" : "negative" },
+{ label: "Realized P&L", value: pl, fmt: v => `\u20AC${v.toLocaleString()}`, cls: (v) => v >= 0 ? "positive" : "negative" },
 { label: "Dividends", value: s.total_dividends, fmt: v => `\u20AC${v.toLocaleString()}` },
 { label: "Interest", value: s.total_interest, fmt: v => `\u20AC${v.toLocaleString()}` },
 { label: "Fees", value: s.total_fees, fmt: v => `\u20AC${v.toLocaleString()}` },
@@ -244,8 +294,8 @@ div.innerHTML = `<div class="label">${c.label}</div><div class="value ${cls}">${
 container.appendChild(div);
 });
 
-const realizedCard = container.querySelector(".card:nth-child(2) .value");
-if (realizedCard) realizedCard.textContent = `\u20AC${(s.total_realized_pl || 0).toLocaleString()}`;
+const realizedCard = container.querySelector(".card:nth-child(3) .value");
+if (realizedCard) realizedCard.textContent = `\u20AC${pl.toLocaleString()}`;
 }
 
 function renderSummaryByAssetClass(s) {
@@ -431,21 +481,7 @@ function renderCashFlowChart(cf) {
   });
 }
 
-async function toggleKnocked(txnId, cb) {
-try {
-const r = await fetch(`${BASE}/api/knocked_down/toggle`, {
-method: "POST",
-headers: {"Content-Type": "application/json"},
-body: JSON.stringify({id: txnId}),
-});
-const data = await r.json();
-cb(data.flagged);
-} catch {
-cb(null);
-}
-}
-
-function renderTransactions(txs, knockedIds) {
+function renderTransactions(txs) {
 const tbody = document.querySelector("#transactions-table tbody");
 const filterInput = document.getElementById("tx-filter");
 const table = document.getElementById("transactions-table");
@@ -522,9 +558,6 @@ return;
 
 filtered.forEach(t => {
 const tr = document.createElement("tr");
-const isBuy = t.type === "BUY" || t.type === "BUY_DERIVATIVE" || t.type === "BUY_WARRANT";
-const checked = t.id && knockedIds.has(t.id);
-if (checked) tr.className = "knocked";
 tr.innerHTML = `
 <td>${new Date(t.datetime).toLocaleDateString()}</td>
 <td>${t.type}</td>
@@ -533,22 +566,7 @@ tr.innerHTML = `
 <td class="num">${t.shares?.toLocaleString(undefined, {minimumFractionDigits: 4}) || ""}</td>
 <td class="num">${t.price != null ? `\u20AC${t.price.toLocaleString(undefined, {minimumFractionDigits: 2})}` : ""}</td>
 <td class="num">${t.amount != null ? `\u20AC${t.amount.toLocaleString(undefined, {minimumFractionDigits: 2})}` : ""}</td>
-<td class="knocked-col">${isBuy && t.id ? `<input type="checkbox" class="knocked-cb" ${checked ? "checked" : ""}>` : "\u2014"}</td>
 `;
-const cb = tr.querySelector(".knocked-cb");
-if (cb) {
-cb.addEventListener("change", async () => {
-const txnId = t.id;
-const r = await fetch(`${BASE}/api/knocked_down/toggle`, {
-method: "POST",
-headers: {"Content-Type": "application/json"},
-body: JSON.stringify({id: txnId}),
-});
-const data = await r.json();
-if (data.flagged) { knockedIds.add(txnId); tr.className = "knocked"; }
-else { knockedIds.delete(txnId); tr.className = ""; }
-});
-}
 tbody.appendChild(tr);
 });
 }

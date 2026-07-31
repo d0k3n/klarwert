@@ -78,6 +78,16 @@ h3 { font-size: 0.95rem; margin: 0 0 4px; font-weight: 600; color: var(--text-pr
 #reload-btn:hover { background: #1f3a2e; }
 #reload-status { font-size: 0.85rem; color: var(--text-secondary); margin-left: 8px; }
 
+#load-btn {
+  display: inline-flex; align-items: center; gap: 8px;
+  margin-left: auto;
+  background: transparent; color: var(--accent-blue); border: 1px solid var(--accent-blue);
+  padding: 6px 14px; border-radius: 6px; font-size: 0.85rem; cursor: pointer;
+  font-family: inherit; transition: all 0.15s;
+}
+#load-btn:hover { background: #16273e; }
+#load-btn .btn-icon { display: block; }
+
 /* Summary Cards */
 .cards {
   display: grid;
@@ -169,10 +179,6 @@ tbody tr:nth-child(even):hover { background: var(--bg-elevated); }
 /* Charts section */
 #product-charts > div { display: flex; gap: 24px; flex-wrap: wrap; }
 #product-charts > div > div { flex: 1; min-width: 300px; }
-
-/* Knocked-out rows */
-.knocked { opacity: .5; text-decoration: line-through; }
-.knocked-col { text-align: center; }
 
 /* Responsive */
 @media (max-width: 768px) {

@@ -30,7 +30,8 @@ def parse_csv(filepath):
         df[col] = pd.to_numeric(df[col], errors="coerce")
 
     df["shares"] = df["shares"].abs()
-    df["asset_class"] = df["asset_class"].fillna("")
+    string_cols = df.select_dtypes(include=["str"]).columns
+    df[string_cols] = df[string_cols].fillna("")
 
     df["tx_type"] = df.apply(_classify_row, axis=1)
     return df
