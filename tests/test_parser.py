@@ -129,3 +129,57 @@ def test_numeric_coercion():
     assert pd.isna(row["shares"])
     assert pd.isna(row["price"])
     assert row["amount"] == -100.00
+
+
+def test_parse_from_bytesio():
+    import io
+    header = (
+        "datetime,date,account_type,category,type,asset_class,name,symbol,"
+        "shares,price,amount,fee,tax,currency,original_amount,"
+        "original_currency,fx_rate,description,transaction_id,"
+        "counterparty_name,counterparty_iban,payment_reference,mcc_code\n"
+    )
+    row = (
+        "2025-06-02T14:24:16.757Z,2025-06-02,DEFAULT,TRADING,BUY,FUND,Fund,IE00B5BMR087,"
+        "0.182315,548.50,-100.00,,,EUR,,,,desc,id100,,,,\n"
+    )
+    df = parse_csv(io.BytesIO((header + row).encode("utf-8")))
+    assert len(df) == 1
+    assert df.iloc[0]["tx_type"] == "BUY"
+
+
+def test_duplicate_transaction_id_dropped():
+    csv = _make_csv([
+        "2025-05-27T11:16:23.775580Z,2025-05-27,DEFAULT,CASH,TRANSFER_INSTANT_INBOUND,,,,,,1000.00,,,EUR,,,,Incoming,id200,,,,",
+        "2025-05-27T11:16:23.775580Z,2025-05-27,DEFAULT,CASH,TRANSFER_INSTANT_INBOUND,,,,,,1000.00,,,EUR,,,,Incoming,id200,,,,",
+        "2025-05-28T11:16:23.775580Z,2025-05-28,DEFAULT,CASH,TRANSFER_INSTANT_INBOUND,,,,,,500.00,,,EUR,,,,Incoming,id201,,,,",
+    ])
+    df = parse_csv(str(csv))
+    csv.unlink()
+    assert len(df) == 2
+
+
+def test_migration_rows_classified_and_balanced(caplog):
+    csv = _make_csv([
+        "2026-07-17T01:08:54.572Z,2026-07-17,DEFAULT,DELIVERY,MIGRATION,STOCK,Santander,ES0113900J37,-375.0,12.0487,,,,EUR,,,,MIGRATION ES0113900J37,id300,,,,",
+        "2026-07-17T01:08:54.581Z,2026-07-17,DEFAULT,DELIVERY,MIGRATION,STOCK,Santander,ES0113900J37,375.0,12.0487,,,,EUR,,,,MIGRATION ES0113900J37,id301,,,,",
+    ])
+    import logging
+    with caplog.at_level(logging.WARNING):
+        df = parse_csv(str(csv))
+    csv.unlink()
+    assert list(df["tx_type"]) == ["MIGRATION", "MIGRATION"]
+    # balanced pair: no "Unpaired MIGRATION" warning
+    assert not any("Unpaired MIGRATION" in r.message for r in caplog.records)
+
+
+def test_unpaired_migration_warns(caplog):
+    csv = _make_csv([
+        "2026-07-17T01:08:54.572Z,2026-07-17,DEFAULT,DELIVERY,MIGRATION,STOCK,Santander,ES0113900J37,375.0,12.0487,,,,EUR,,,,MIGRATION ES0113900J37,id302,,,,",
+    ])
+    import logging
+    with caplog.at_level(logging.WARNING):
+        df = parse_csv(str(csv))
+    csv.unlink()
+    assert df.iloc[0]["tx_type"] == "MIGRATION"
+    assert any("Unpaired MIGRATION" in r.message for r in caplog.records)
