@@ -38,15 +38,48 @@ def run_engine(df):
         "closed_lots": 0, "total_shares_sold": 0.0,
     })
 
-    for isin, rows in by_isin.items():
-        name = rows[0]["name"]
+    tilg_by_isin = defaultdict(list)
+    for _, r in cash_rows[cash_rows["tx_type"] == "TILG"].iterrows():
+        tilg_by_isin[r["symbol"]].append(r)
+
+    all_isins = list(by_isin.keys()) + [i for i in tilg_by_isin if i not in by_isin]
+
+    for isin in all_isins:
+        rows = by_isin.get(isin, [])
+        tilg_rows = tilg_by_isin.get(isin, [])
+        if rows:
+            name = rows[0]["name"]
+            asset_class = rows[0]["asset_class"]
+        else:
+            name = tilg_rows[0]["name"] or isin
+            asset_class = tilg_rows[0]["asset_class"]
         total_invested = 0.0
         total_fees = 0.0
         total_trades = 0
         lot_id_gen = iter(range(1, 10**9))
         open_lots = []
 
-        for row in rows:
+        events = [(row["datetime"], 0, row) for row in rows]
+        events += [(r["datetime"], 1, r) for r in tilg_rows]
+        events.sort(key=lambda e: (e[0], e[1]))
+
+        for _, kind, row in events:
+            if kind == 1:
+                amount = 0.0 if _isna(row["amount"]) else abs(row["amount"])
+                cost = sum(l.total_cost for l in open_lots)
+                shares_taken = sum(l.shares for l in open_lots)
+                realized_pl = amount - cost
+                month = row["datetime"].strftime("%Y-%m")
+                monthly_pl[month] += realized_pl
+                cp = closed_positions[isin]
+                cp["isin"] = isin
+                cp["name"] = name
+                cp["total_realized_pl"] += realized_pl
+                if shares_taken > 0.001:
+                    cp["closed_lots"] += 1
+                    cp["total_shares_sold"] += shares_taken
+                open_lots.clear()
+                continue
             shares = row["shares"]
             price = abs(row["price"]) if not _isna(row["price"]) else 0.0
             fee = abs(row["fee"]) if not _isna(row["fee"]) else 0.0
@@ -112,15 +145,6 @@ def run_engine(df):
                     cp["closed_lots"] += 1
                     cp["total_shares_sold"] += matched_shares
 
-        tilg_mask = (cash_rows["tx_type"] == "TILG") & (cash_rows["symbol"] == isin)
-        for _, tilg_row in cash_rows[tilg_mask].iterrows():
-            if not _isna(tilg_row["amount"]):
-                amount = abs(tilg_row["amount"])
-                month = tilg_row["datetime"].strftime("%Y-%m")
-                monthly_pl[month] += amount
-                cp = closed_positions[isin]
-                cp["total_realized_pl"] += amount
-
         if open_lots:
             remaining_shares = sum(l.shares for l in open_lots)
             total_cost_basis = sum(l.total_cost for l in open_lots)
@@ -128,7 +152,7 @@ def run_engine(df):
             open_positions.append({
                 "isin": isin,
                 "name": name,
-                "asset_class": rows[0]["asset_class"],
+                "asset_class": asset_class,
                 "shares": round(remaining_shares, 6),
                 "average_cost": round(avg_cost, 4),
                 "total_cost": round(total_cost_basis, 2),
@@ -137,7 +161,7 @@ def run_engine(df):
         per_product[isin] = {
             "isin": isin,
             "name": name,
-            "asset_class": rows[0]["asset_class"],
+            "asset_class": asset_class,
             "status": "open" if open_lots else "closed",
             "total_invested": round(total_invested, 2),
             "total_realized_pl": round(closed_positions[isin]["total_realized_pl"], 2),
@@ -182,7 +206,10 @@ def run_engine(df):
     return {
         "summary": summary,
         "open_positions": open_positions,
-        "closed_positions": [v for v in closed_positions.values() if v["closed_lots"] > 0],
+        "closed_positions": [
+            v for v in closed_positions.values()
+            if v["closed_lots"] > 0 or abs(v["total_realized_pl"]) > 0.005
+        ],
         "cash_flow": cash_flow,
         "transactions": transactions,
         "products": list(per_product.values()),

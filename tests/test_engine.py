@@ -400,3 +400,47 @@ def test_knocked_loss_cross_year_goes_to_disposal_year():
     ])
     result = run_engine(df)
     assert result["monthly_pl"][0]["month"] == "2026-01"
+
+
+def test_tilg_consumes_open_lots():
+    df = _make_df([
+        {"datetime": pd.Timestamp("2025-06-01", tz="UTC"), "tx_type": "BUY", "name": "W", "symbol": "DE100",
+         "asset_class": "DERIVATIVE", "shares": 100.0, "price": 5.0, "amount": -500.0, "fee": 0.0, "tax": 0.0},
+        {"datetime": pd.Timestamp("2025-06-20", tz="UTC"), "tx_type": "TILG", "name": "W", "symbol": "DE100",
+         "asset_class": "DERIVATIVE", "shares": 0.0, "price": 0.0, "amount": 300.0, "fee": 0.0, "tax": 0.0},
+    ])
+    result = run_engine(df)
+    assert len(result["open_positions"]) == 0
+    assert len(result["closed_positions"]) == 1
+    cp = result["closed_positions"][0]
+    assert round(cp["total_realized_pl"], 2) == round(300.0 - 500.0, 2)
+    assert cp["total_shares_sold"] == 100.0
+    assert result["monthly_pl"] == [{"month": "2025-06", "realized_pl": -200.0}]
+
+
+def test_tilg_does_not_touch_lots_bought_after():
+    df = _make_df([
+        {"datetime": pd.Timestamp("2025-06-01", tz="UTC"), "tx_type": "BUY", "name": "W", "symbol": "DE101",
+         "asset_class": "DERIVATIVE", "shares": 100.0, "price": 5.0, "amount": -500.0, "fee": 0.0, "tax": 0.0},
+        {"datetime": pd.Timestamp("2025-06-20", tz="UTC"), "tx_type": "TILG", "name": "W", "symbol": "DE101",
+         "asset_class": "DERIVATIVE", "shares": 0.0, "price": 0.0, "amount": 300.0, "fee": 0.0, "tax": 0.0},
+        {"datetime": pd.Timestamp("2025-06-25", tz="UTC"), "tx_type": "BUY", "name": "W", "symbol": "DE101",
+         "asset_class": "DERIVATIVE", "shares": 50.0, "price": 6.0, "amount": -300.0, "fee": 0.0, "tax": 0.0},
+    ])
+    result = run_engine(df)
+    assert len(result["open_positions"]) == 1
+    op = result["open_positions"][0]
+    assert round(op["shares"], 4) == 50.0
+    assert round(op["total_cost"], 2) == 300.0
+    assert round(result["closed_positions"][0]["total_realized_pl"], 2) == -200.0
+
+
+def test_tilg_only_isin_appears_in_closed_positions():
+    df = _make_df([
+        {"datetime": pd.Timestamp("2025-06-20", tz="UTC"), "tx_type": "TILG", "name": "ORPHAN", "symbol": "DE102",
+         "asset_class": "DERIVATIVE", "shares": 0.0, "price": 0.0, "amount": 25.0, "fee": 0.0, "tax": 0.0},
+    ])
+    result = run_engine(df)
+    assert len(result["closed_positions"]) == 1
+    assert result["closed_positions"][0]["total_realized_pl"] == 25.0
+    assert result["monthly_pl"] == [{"month": "2025-06", "realized_pl": 25.0}]
