@@ -573,3 +573,28 @@ def test_derivative_executions_include_buy_tax():
     assert e["ko_total"] == -503.0
     eng = run_engine(df)
     assert round(eng["closed_positions"][0]["total_realized_pl"], 2) == e["ko_total"]
+
+
+def test_reconciliation_balances_on_full_cycle():
+    df = _make_df([
+        {"datetime": pd.Timestamp("2025-06-01", tz="UTC"), "tx_type": "DEPOSIT", "name": "", "symbol": "",
+         "asset_class": "", "shares": 0.0, "price": 0.0, "amount": 2000.0, "fee": 0.0, "tax": 0.0},
+        {"datetime": pd.Timestamp("2025-06-02", tz="UTC"), "tx_type": "BUY", "name": "X", "symbol": "X",
+         "asset_class": "STOCK", "shares": 10.0, "price": 50.0, "amount": -501.0, "fee": 1.0, "tax": 0.0},
+        {"datetime": pd.Timestamp("2025-07-01", tz="UTC"), "tx_type": "SELL", "name": "X", "symbol": "X",
+         "asset_class": "STOCK", "shares": 10.0, "price": 60.0, "amount": 599.0, "fee": 1.0, "tax": 0.0},
+        {"datetime": pd.Timestamp("2025-07-06", tz="UTC"), "tx_type": "DIVIDEND", "name": "X", "symbol": "X",
+         "asset_class": "STOCK", "shares": 0.0, "price": 0.0, "amount": 20.0, "fee": 0.0, "tax": 0.0},
+        {"datetime": pd.Timestamp("2025-07-10", tz="UTC"), "tx_type": "CARD", "name": "SHOP", "symbol": "",
+         "asset_class": "", "shares": 0.0, "price": 0.0, "amount": -30.0, "fee": 0.0, "tax": 0.0},
+        {"datetime": pd.Timestamp("2025-07-15", tz="UTC"), "tx_type": "INTEREST", "name": "", "symbol": "",
+         "asset_class": "", "shares": 0.0, "price": 0.0, "amount": 5.0, "fee": 0.0, "tax": 0.0},
+    ])
+    result = run_engine(df)
+    rec = result["summary"]["reconciliation"]
+    assert rec["net_deposits"] == 2000.0
+    assert rec["realized_pl"] == 98.0
+    assert rec["cash_balance"] == 2093.0
+    assert rec["open_positions_cost"] == 0.0
+    assert rec["card_spending"] == 30.0
+    assert abs(rec["difference"]) <= 0.01

@@ -267,6 +267,23 @@ def run_engine(df):
         2,
     )
 
+    cash_balance = df["amount"].sum() - summary["total_dividend_tax"]
+    open_cost = sum(p["total_cost"] for p in open_positions)
+    standalone_fees = abs(cash_rows[cash_rows["tx_type"] == "FEE"]["amount"].sum())
+    income = summary["total_dividends_net"] + summary["total_interest"] + summary["total_saveback"]
+    sources = summary["net_deposits"] + income + summary["total_realized_pl"]
+    uses = cash_balance + open_cost + summary["total_card_spending"] + standalone_fees
+    summary["reconciliation"] = {
+        "net_deposits": summary["net_deposits"],
+        "income": round(income, 2),
+        "realized_pl": summary["total_realized_pl"],
+        "cash_balance": round(cash_balance, 2),
+        "open_positions_cost": round(open_cost, 2),
+        "card_spending": summary["total_card_spending"],
+        "fees": round(standalone_fees, 2),
+        "difference": round(sources - uses, 2),
+    }
+
     by_class = defaultdict(lambda: {"total_invested": 0.0, "total_realized_pl": 0.0, "total_dividends": 0.0,
                                     "total_dividend_tax": 0.0, "total_fees": 0.0, "count": 0})
     for p in per_product.values():

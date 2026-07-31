@@ -72,6 +72,7 @@ document.getElementById("summary-by-asset-class").innerHTML = "";
 if (empty) return;
 renderSummary(summary);
 renderSummaryByAssetClass(summary);
+renderRecon(summary);
 renderTable("open-positions-table", openPositions, TABLE_CONFIGS['open-positions-table']);
 renderTable("closed-positions-table", closedPositions, TABLE_CONFIGS['closed-positions-table']);
 renderCashFlowChart(cashFlow);
@@ -314,6 +315,30 @@ div.innerHTML = `
 <div class="value">Dividends: \u20AC${data.total_dividends.toLocaleString()}</div>
 `;
 container.appendChild(div);
+});
+}
+
+function renderRecon(s) {
+const tbody = document.querySelector("#recon-table tbody");
+tbody.innerHTML = "";
+if (!s.reconciliation) return;
+const r = s.reconciliation;
+const eur = v => `\u20AC${(v || 0).toLocaleString(undefined, {minimumFractionDigits: 2, maximumFractionDigits: 2})}`;
+const rows = [
+  ["Net deposits", r.net_deposits],
+  ["Income (dividends net, interest, saveback)", r.income],
+  ["Realized P&L", r.realized_pl],
+  ["Cash balance", r.cash_balance],
+  ["Open positions at cost", r.open_positions_cost],
+  ["Card spending", r.card_spending],
+  ["Standalone fees", r.fees],
+  ["Unreconciled difference", r.difference],
+];
+rows.forEach(([label, val], i) => {
+  const tr = document.createElement("tr");
+  if (i === rows.length - 1) tr.className = "total-row";
+  tr.innerHTML = `<td>${label}</td><td class="num">${eur(val)}</td>`;
+  tbody.appendChild(tr);
 });
 }
 
