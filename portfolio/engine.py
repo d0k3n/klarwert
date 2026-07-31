@@ -268,6 +268,10 @@ def run_engine(df):
     )
 
     cash_balance = df["amount"].sum() - summary["total_dividend_tax"]
+    trade_rows = df[df["tx_type"].isin(["BUY", "SELL"])]
+    trade_fees = abs(trade_rows["fee"].dropna().sum()) if "fee" in trade_rows.columns else 0.0
+    trade_taxes = abs(trade_rows["tax"].dropna().sum()) if "tax" in trade_rows.columns else 0.0
+    cash_balance -= trade_fees + trade_taxes
     open_cost = sum(p["total_cost"] for p in open_positions)
     standalone_fees = abs(cash_rows[cash_rows["tx_type"] == "FEE"]["amount"].sum())
     income = summary["total_dividends_net"] + summary["total_interest"] + summary["total_saveback"]
