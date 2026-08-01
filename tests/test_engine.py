@@ -738,6 +738,19 @@ def test_yield_on_cost_for_open_product():
     assert p["yield_on_cost"] == 2.5
 
 
+def test_open_position_weights():
+    df = _make_df([
+        {"datetime": pd.Timestamp("2025-06-01", tz="UTC"), "tx_type": "BUY", "name": "A", "symbol": "A",
+         "asset_class": "STOCK", "shares": 10.0, "price": 30.0, "amount": -300.0, "fee": 0.0, "tax": 0.0},
+        {"datetime": pd.Timestamp("2025-06-01", tz="UTC"), "tx_type": "BUY", "name": "B", "symbol": "B",
+         "asset_class": "STOCK", "shares": 10.0, "price": 10.0, "amount": -100.0, "fee": 0.0, "tax": 0.0},
+    ])
+    result = run_engine(df)
+    weights = {p["isin"]: p["weight"] for p in result["open_positions"]}
+    assert weights["A"] == 0.75
+    assert weights["B"] == 0.25
+
+
 def test_compute_spending_categories_and_refunds():
     df = _make_df([
         {"datetime": pd.Timestamp("2025-06-01", tz="UTC"), "tx_type": "CARD", "name": "INTERMARCHE", "symbol": "",

@@ -25,7 +25,7 @@ const TABLE_CONFIGS = {
   'open-positions-table': {
     groupColumns: ['asset_class'],
     groupLabels: { asset_class: 'Asset Class' },
-    numericFields: ['shares', 'total_cost', 'market_value', 'unrealized_pl'],
+    numericFields: ['shares', 'total_cost', 'market_value', 'unrealized_pl', 'weight'],
     averageFields: ['average_cost', 'market_price'],
   },
   'closed-positions-table': {
@@ -90,7 +90,7 @@ renderRecon(summary);
 const openPositions = valuedPositions.positions || [];
 renderTable("open-positions-table", openPositions, TABLE_CONFIGS['open-positions-table']);
 renderPriceInputs(openPositions);
-renderValuedCards(valuedPositions.totals || {});
+renderValuedCards(valuedPositions.totals || {}, openPositions);
 renderTable("closed-positions-table", closedPositions, TABLE_CONFIGS['closed-positions-table']);
 renderCashFlowChart(cashFlow);
 renderTransactions(transactions);
@@ -272,6 +272,7 @@ function insertGroupDropdown(table, config, onChange) {
 
 function formatVal(key, val) {
   if (typeof val !== 'number') return val ?? '';
+  if (key === 'weight') return `${(val * 100).toFixed(1)}%`;
   if (key === 'yield_on_cost') return val == null ? '' : `${val.toFixed(2)}%`;
   if (key === 'average_cost' || key.endsWith('_cost') || key === 'total_realized_pl' || key === 'total_invested' || key === 'total_dividends' || key === 'total_dividend_tax' || key === 'total_dividends_net' || key === 'total_fees' || key === 'amount' || key === 'price' || key === 'ko_total' || key === 'warrant_return' || key === 'net_result' || key === 'proceeds' || key === 'cost_basis' || key === 'pl' || key === 'market_value' || key === 'unrealized_pl' || key === 'market_price' || key === 'gross' || key === 'wht' || key === 'net') {
     return `\u20AC${val.toLocaleString(undefined, {minimumFractionDigits: 2, maximumFractionDigits: 2})}`;
@@ -834,12 +835,18 @@ a.download = `tax_report_${lastTaxReport.year}.csv`;
 a.click();
 };
 
-function renderValuedCards(totals) {
+function renderValuedCards(totals, positions) {
 const container = document.getElementById("summary-cards");
 const eur = v => `\u20AC${(v || 0).toLocaleString(undefined, {minimumFractionDigits: 2, maximumFractionDigits: 2})}`;
+const top5 = (positions || [])
+  .map(p => p.weight || 0)
+  .sort((a, b) => b - a)
+  .slice(0, 5)
+  .reduce((a, b) => a + b, 0);
 [
   { label: "Est. Market Value", value: eur(totals.market_value) },
   { label: "Unrealized P&L", value: eur(totals.unrealized_pl), cls: (totals.unrealized_pl || 0) >= 0 ? "positive" : "negative" },
+  { label: "Top 5 Concentration", value: `${(top5 * 100).toFixed(1)}%` },
 ].forEach(c => {
   const div = document.createElement("div");
   div.className = "card";

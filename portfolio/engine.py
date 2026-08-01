@@ -286,6 +286,13 @@ def run_engine(df):
             "total_trades": total_trades,
         }
 
+    total_open_cost = sum(p["total_cost"] for p in open_positions if p["total_cost"] > 0)
+    for p in open_positions:
+        if total_open_cost > 0 and p["total_cost"] > 0:
+            p["weight"] = round(p["total_cost"] / total_open_cost, 4)
+        else:
+            p["weight"] = 0.0
+
     div_rows = cash_rows[cash_rows["tx_type"] == "DIVIDEND"]
     for _, row in div_rows.iterrows():
         isin = row["symbol"]
