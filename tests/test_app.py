@@ -57,3 +57,20 @@ def test_upload_parses_without_temp_file(monkeypatch, tmp_path):
     assert resp.get_json()["ok"] is True
     assert app_module.df is not None
     assert len(app_module.df) == 1
+
+
+def test_analysis_endpoints_do_not_500():
+    app_module.df = _df()
+    app_module.invalidate_cache()
+    client = app_module.app.test_client()
+    for endpoint in [
+        "/api/performance",
+        "/api/income",
+        "/api/spending",
+        "/api/valued_positions",
+        "/api/tax_report?year=2025",
+        "/api/lot_matches",
+        "/api/summary",
+    ]:
+        resp = client.get(endpoint)
+        assert resp.status_code == 200, f"{endpoint} returned {resp.status_code}"

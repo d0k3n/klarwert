@@ -8,8 +8,9 @@ from pathlib import Path
 from flask import Flask, jsonify, request, send_from_directory
 
 from portfolio.parser import parse_csv
-from portfolio.engine import run_engine, compute_derivative_executions, compute_card_transactions, auto_detect_knocked
+from portfolio.engine import run_engine, compute_derivative_executions, compute_card_transactions, auto_detect_knocked, apply_prices, compute_income, compute_spending
 from portfolio.tax_report import build_tax_report
+from portfolio.performance import compute_performance
 import support
 
 logging.basicConfig(level=logging.INFO, format="%(levelname)s: %(message)s")
