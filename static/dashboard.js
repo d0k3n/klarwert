@@ -901,16 +901,31 @@ window.refreshPrices = async function () {
   status.textContent = "Fetching...";
   try {
     const r = await fetch(`${BASE}/api/refresh_prices`, { method: "POST" });
-    if (!r.ok) throw new Error(`HTTP ${r.status}`);
-    const data = await r.json();
-    const updated = Object.keys(data.prices || {}).length;
-    const skipped = (data.skipped || []).length;
-    if (skipped > 0) {
-      status.textContent = `Updated ${updated}; skipped ${skipped} (manual or unresolved).`;
-    } else {
-      status.textContent = `Updated ${updated} price${updated === 1 ? "" : "s"}.`;
+    if (!r.ok) {
+      const err = await r.json().catch(() => ({}));
+      status.textContent = `Failed: ${err.error || ("HTTP " + r.status)}`;
+      return;
     }
+    const data = await r.json();
+    const updated = data.prices || {};
+    const updatedCount = Object.keys(updated).length;
+    const skipped = data.skipped || [];
     await loadAllData();
+    if (updatedCount === 0 && skipped.length === 0) {
+      status.textContent = "No open positions to price.";
+      return;
+    }
+    const reasons = {};
+    skipped.forEach(s => { reasons[s.reason] = (reasons[s.reason] || 0) + 1; });
+    const reasonText = Object.keys(reasons)
+      .map(r => `${reasons[r]} ${r.replace(/_/g, " ")}`)
+      .join(", ");
+    const statusText = `Updated ${updatedCount} price${updatedCount === 1 ? "" : "s"}.` +
+      (reasonText ? ` Skipped: ${reasonText}.` : "");
+    status.textContent = statusText;
+    const detail = skipped.filter(s => s.message && s.reason !== "manual")
+      .map(s => `${s.isin}: ${s.message}`).join(" | ");
+    if (detail) console.warn("Price refresh details:", detail);
   } catch (e) {
     status.textContent = "Failed to fetch prices from Yahoo.";
   } finally {

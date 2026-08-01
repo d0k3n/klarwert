@@ -10,6 +10,32 @@ GOOD_QUOTE_TYPES = {"EQUITY", "ETF", "CRYPTOCURRENCY"}
 _UA = "Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0 Safari/537.36"
 
 
+def _warm_session(session):
+    try:
+        session.get("https://fc.yahoo.com", timeout=10, headers={"User-Agent": _UA})
+    except Exception:
+        pass
+    crumb = _fetch_crumb(session)
+    if crumb:
+        if session.params is None:
+            session.params = {}
+        session.params["crumb"] = crumb
+    return session
+
+
+def _fetch_crumb(session):
+    try:
+        r = session.get(
+            "https://query1.finance.yahoo.com/v1/test/getcrumb",
+            timeout=10,
+            headers={"User-Agent": _UA},
+        )
+        text = r.text.strip()
+        return text if (r.status_code == 200 and text and len(text) < 64) else None
+    except Exception:
+        return None
+
+
 def _yahoo_get(session, path, params):
     last = None
     for host in YAHOO_HOSTS:
@@ -59,14 +85,6 @@ def to_eur(amount, currency, rate):
     return amount * rate
 
 
-def _warm_session(session):
-    try:
-        session.get("https://fc.yahoo.com", timeout=10, headers={"User-Agent": _UA})
-    except Exception:
-        pass
-    return session
-
-
 def refresh_prices(positions, existing_prices, ticker_cache, session=None):
     session = _warm_session(session or requests.Session())
     prices = {}
@@ -74,8 +92,9 @@ def refresh_prices(positions, existing_prices, ticker_cache, session=None):
     skipped = []
     try:
         rate = eur_rate(session)
-    except Exception:
+    except Exception as exc:
         rate = 1.0
+        skipped.append({"isin": "_fx", "reason": "fx_unavailable", "message": f"EUR rate unavailable: {exc}"})
     for p in positions:
         isin = p["isin"]
         entry = existing_prices.get(isin)
@@ -91,6 +110,6 @@ def refresh_prices(positions, existing_prices, ticker_cache, session=None):
             price = to_eur(native, currency, rate)
             prices[isin] = {"price": round(float(price), 6), "source": "yahoo"}
             tickers[isin] = ticker
-        except Exception:
-            skipped.append({"isin": isin, "reason": "fetch_error"})
+        except Exception as exc:
+            skipped.append({"isin": isin, "reason": "fetch_error", "message": f"{type(exc).__name__}: {exc}"})
     return {"prices": prices, "tickers": tickers, "skipped": skipped}

@@ -26,7 +26,7 @@ class FakeSession:
 
     def get(self, url, params=None, timeout=None, headers=None):
         self.calls.append((url, params))
-        if "fc.yahoo.com" in url:
+        if "fc.yahoo.com" in url or "getcrumb" in url:
             return FakeResp({})
         if self.i < len(self.responses):
             payload = self.responses[self.i]
@@ -107,7 +107,7 @@ def test_refresh_does_not_overwrite_manual():
     s = FakeSession([_search("IGNORED")])
     out = refresh_prices(positions, existing, {}, s)
     assert "A" not in out["prices"]
-    assert out["skipped"][0]["reason"] == "manual"
+    assert any(item["reason"] == "manual" for item in out["skipped"])
 
 
 def test_refresh_skips_unresolved():
@@ -146,7 +146,7 @@ class RaisingSession(FakeSession):
         self.n = n
 
     def get(self, url, params=None, timeout=None, headers=None):
-        if "fc.yahoo.com" in url:
+        if "fc.yahoo.com" in url or "getcrumb" in url:
             return FakeResp({})
         if self.n > 0:
             self.n -= 1
