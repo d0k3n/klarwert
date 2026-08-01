@@ -6,6 +6,8 @@ from portfolio.market import (
 
 
 class FakeResp:
+    status_code = 200
+
     def __init__(self, payload):
         self._payload = payload
 
@@ -22,8 +24,10 @@ class FakeSession:
         self.i = 0
         self.calls = []
 
-    def get(self, url, params=None, timeout=None):
+    def get(self, url, params=None, timeout=None, headers=None):
         self.calls.append((url, params))
+        if "fc.yahoo.com" in url:
+            return FakeResp({})
         if self.i < len(self.responses):
             payload = self.responses[self.i]
         else:
@@ -125,3 +129,35 @@ def test_refresh_reuses_ticker_cache():
     ])
     out = refresh_prices(positions, {}, {"A": "AAPL"}, s)
     assert out["tickers"]["A"] == "AAPL"
+
+
+class RaisingResp:
+    status_code = 429
+
+    def raise_for_status(self):
+        raise Exception("429 Too Many Requests")
+
+    def json(self):
+        raise Exception("unreachable")
+
+
+class RaisingSession(FakeSession):
+    def __init__(self, n):
+        self.n = n
+
+    def get(self, url, params=None, timeout=None, headers=None):
+        if "fc.yahoo.com" in url:
+            return FakeResp({})
+        if self.n > 0:
+            self.n -= 1
+            return FakeResp({"chart": {"result": [{"meta": {"regularMarketPrice": 1.0}}]}})
+        return RaisingResp()
+
+
+def test_refresh_isolates_network_failure_per_isin():
+    positions = [{"isin": "A", "name": "A"}, {"isin": "B", "name": "B"}]
+    s = RaisingSession(1)  # eur_rate succeeds, all resolves raise
+    out = refresh_prices(positions, {}, {}, s)
+    assert out["prices"] == {}
+    assert len(out["skipped"]) == 2
+    assert all(item["reason"] == "fetch_error" for item in out["skipped"])
