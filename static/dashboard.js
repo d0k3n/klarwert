@@ -142,44 +142,62 @@ input.value = "";
 }
 };
 
-window.activateLicense = async function () {
-  const input = document.getElementById("license-key");
-  const status = document.getElementById("license-status");
-  const btn = document.getElementById("license-activate-btn");
-  const key = input.value.trim();
-  if (!key) { status.textContent = "Please enter your license key."; return; }
-  btn.disabled = true;
-  status.textContent = "Activating...";
-  try {
-    const r = await fetch(`${BASE}/api/license/activate`, {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ key }),
-    });
-    const data = await r.json();
-    if (!data.ok) throw new Error(data.error || "activation failed");
-    document.getElementById("license-overlay").style.display = "none";
-    await loadAllData();
-  } catch (e) {
-    status.textContent = `Failed: ${e.message}`;
-  } finally {
-    btn.disabled = false;
+const supportConfig = {};
+window.SUPPORT_URLS = supportConfig;
+
+function openSupportUrl(url) {
+  if (window.pywebview && window.pywebview.api && window.pywebview.api.open_url) {
+    window.pywebview.api.open_url(url);
+  } else {
+    window.open(url, "_blank");
   }
+}
+
+window.openSupport = function () {
+  if (supportConfig.DONATION_URL) openSupportUrl(supportConfig.DONATION_URL);
 };
+
+window.openFeatureRequest = function () {
+  if (supportConfig.GITHUB_URL) openSupportUrl(supportConfig.GITHUB_URL);
+};
+
+function bindSupportLinks() {
+  bindSupportButton("support-btn", "DONATION_URL");
+  bindSupportButton("feature-btn", "GITHUB_URL");
+  const footerLink = document.getElementById("footer-support-link");
+  if (footerLink) {
+    if (!supportConfig.DONATION_URL) {
+      footerLink.style.display = "none";
+    } else {
+      footerLink.addEventListener("click", (e) => {
+        e.preventDefault();
+        openSupportUrl(supportConfig.DONATION_URL);
+      });
+    }
+  }
+}
+
+function bindSupportButton(id, key) {
+  const el = document.getElementById(id);
+  if (!el) return;
+  if (!supportConfig[key]) {
+    el.style.display = "none";
+    return;
+  }
+  el.addEventListener("click", () => openSupportUrl(supportConfig[key]));
+}
 
 (async () => {
   try {
-    const r = await fetch(`${BASE}/api/license/status`);
+    const r = await fetch(`${BASE}/api/support`);
     const data = await r.json();
-    if (data.activated) {
-      document.getElementById("license-overlay").style.display = "none";
-      await loadAllData();
-    } else {
-      document.getElementById("license-overlay").style.display = "flex";
-    }
+    supportConfig.DONATION_URL = data.donation_url || "";
+    supportConfig.GITHUB_URL = data.github_url || "";
+    bindSupportLinks();
   } catch (e) {
-    document.getElementById("license-overlay").style.display = "flex";
+    bindSupportLinks();
   }
+  await loadAllData();
 })();
 
 function groupData(data, groupBy, numericFields, averageFields) {

@@ -8,15 +8,6 @@
 <script src="/static/vendor/chart.umd.min.js"></script>
 </head>
 <body>
-<div id="license-overlay" style="display:none; position:fixed; inset:0; z-index:1000; background:#0f172a; color:#e2e8f0; font-family:system-ui, sans-serif; display:flex; align-items:center; justify-content:center;">
-  <div style="max-width:420px; width:90%; text-align:center; padding:32px; background:#1e293b; border-radius:12px; box-shadow:0 10px 40px rgba(0,0,0,0.5);">
-    <h2 style="margin-top:0;">Activate Trade Republic Analyzer</h2>
-    <p style="color:#94a3b8; font-size:0.95em;">Enter the license key you received after purchase to continue.</p>
-    <input id="license-key" type="text" placeholder="XXXX-XXXX-XXXX-XXXX" style="width:100%; box-sizing:border-box; padding:12px; margin:12px 0; border-radius:8px; border:1px solid #334155; background:#0f172a; color:#e2e8f0; font-size:1em;">
-    <button id="license-activate-btn" onclick="window.activateLicense()" style="width:100%; padding:12px; border:none; border-radius:8px; background:#2563eb; color:#fff; font-size:1em; cursor:pointer;">Activate</button>
-    <div id="license-status" style="margin-top:12px; font-size:0.9em; min-height:1.2em;"></div>
-  </div>
-</div>
 <div class="page-header">
   <div class="header-left">
     <h1>Portfolio Analysis</h1>
@@ -24,6 +15,8 @@
   </div>
   <div class="header-right">
     <span class="header-timestamp" id="header-timestamp"></span>
+    <button id="support-btn" onclick="window.openSupport()">&#x2615; Support</button>
+    <button id="feature-btn" onclick="window.openFeatureRequest()">Request a Feature</button>
     <button id="reload-btn" onclick="window.reloadData()">&#x21bb; Reload Data</button>
     <span id="reload-status"></span>
   </div>
@@ -271,5 +264,9 @@
 </section>
 
 <script src="/static/dashboard.js"></script>
+<footer class="app-footer">
+  <span>Made with &lt;3 &middot; Free forever.</span>
+  <a href="#" id="footer-support-link">Support the project</a>
+</footer>
 </body>
 </html>

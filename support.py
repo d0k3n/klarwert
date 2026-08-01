@@ -1,0 +1,2 @@
+DONATION_URL = ""
+GITHUB_URL = ""

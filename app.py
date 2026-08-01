@@ -8,10 +8,9 @@ from pathlib import Path
 from flask import Flask, jsonify, request, send_from_directory
 
 from portfolio.parser import parse_csv
-from portfolio.engine import run_engine, compute_derivative_executions, compute_card_transactions, auto_detect_knocked, apply_prices, compute_income, compute_spending
+from portfolio.engine import run_engine, compute_derivative_executions, compute_card_transactions, auto_detect_knocked
 from portfolio.tax_report import build_tax_report
-from portfolio.performance import compute_performance
-import licensing as license_module
+import support
 
 logging.basicConfig(level=logging.INFO, format="%(levelname)s: %(message)s")
 logger = logging.getLogger(__name__)
@@ -142,27 +141,12 @@ def api_status():
     return jsonify({"loaded": df is not None, "count": len(df) if df is not None else 0})
 
 
-@app.route("/api/license/status")
-def api_license_status():
-    return jsonify({"activated": license_module.is_activated()})
-
-
-@app.route("/api/license/activate", methods=["POST"])
-def api_license_activate():
-    body = request.get_json(silent=True) or {}
-    key = (body.get("key") or "").strip()
-    if not key:
-        return jsonify({"ok": False, "error": "missing license key"}), 400
-    result = license_module.activate(key)
-    if not result["ok"]:
-        return jsonify(result), 400
-    return jsonify(result)
-
-
-@app.route("/api/license/deactivate", methods=["POST"])
-def api_license_deactivate():
-    license_module.deactivate()
-    return jsonify({"ok": True})
+@app.route("/api/support")
+def api_support():
+    return jsonify({
+        "donation_url": support.DONATION_URL,
+        "github_url": support.GITHUB_URL,
+    })
 
 
 @app.route("/")

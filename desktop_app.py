@@ -4,9 +4,16 @@ import time
 import threading
 import socket
 import urllib.request
+import webbrowser
 
 import webview
 from app import app, resource_path
+import support
+
+
+class Bridges:
+    def open_url(self, url):
+        webbrowser.open(url)
 
 
 def find_free_port():
@@ -47,6 +54,7 @@ def main():
         url,
         width=1280,
         height=900,
+        js_api=Bridges(),
     )
     webview.start()
 

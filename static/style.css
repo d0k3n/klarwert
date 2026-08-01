@@ -190,3 +190,35 @@ tbody tr:nth-child(even):hover { background: var(--bg-elevated); }
 @media (max-width: 480px) {
   .cards { grid-template-columns: 1fr; }
 }
+
+/* Support / donation */
+#support-btn, #feature-btn {
+  background: var(--bg-surface);
+  color: var(--text-primary);
+  border: 1px solid var(--border-color);
+  border-radius: 6px;
+  padding: 6px 12px;
+  font-size: 0.85rem;
+  cursor: pointer;
+}
+#support-btn:hover, #feature-btn:hover {
+  border-color: var(--accent-blue);
+  color: var(--accent-blue);
+}
+
+.app-footer {
+  margin-top: 40px;
+  padding: 16px;
+  text-align: center;
+  color: var(--text-muted);
+  font-size: 0.85rem;
+  border-top: 1px solid var(--border-color);
+}
+.app-footer a {
+  color: var(--accent-blue);
+  text-decoration: none;
+}
+.app-footer a:hover {
+  text-decoration: underline;
+}
+
