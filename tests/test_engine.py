@@ -1,5 +1,5 @@
 import pandas as pd
-from portfolio.engine import run_engine, auto_detect_knocked, compute_derivative_executions, apply_prices
+from portfolio.engine import run_engine, auto_detect_knocked, compute_derivative_executions, apply_prices, compute_income
 
 
 def _make_df(rows):
@@ -697,3 +697,42 @@ def test_apply_prices_empty_prices():
                             "shares": 1.0, "average_cost": 10.0, "total_cost": 10.0}], {})
     assert valued["totals"]["market_value"] == 0.0
     assert valued["positions"][0]["market_price"] is None
+
+
+def test_compute_income_monthly_and_history():
+    df = _make_df([
+        {"datetime": pd.Timestamp("2025-06-15", tz="UTC"), "tx_type": "DIVIDEND", "name": "ABC", "symbol": "US1",
+         "asset_class": "STOCK", "shares": 0.0, "price": 0.0, "amount": 10.0, "fee": 0.0, "tax": -1.5,
+         "currency": "EUR", "original_currency": "USD"},
+        {"datetime": pd.Timestamp("2025-06-20", tz="UTC"), "tx_type": "INTEREST", "name": "", "symbol": "",
+         "asset_class": "", "shares": 0.0, "price": 0.0, "amount": 2.0, "fee": 0.0, "tax": 0.0,
+         "currency": "EUR", "original_currency": ""},
+        {"datetime": pd.Timestamp("2025-07-02", tz="UTC"), "tx_type": "SAVEBACK", "name": "S&P", "symbol": "IE",
+         "asset_class": "FUND", "shares": 0.0, "price": 0.0, "amount": 3.0, "fee": 0.0, "tax": 0.0,
+         "currency": "EUR", "original_currency": ""},
+    ])
+    income = compute_income(df)
+    jun = [m for m in income["monthly"] if m["month"] == "2025-06"][0]
+    assert jun["dividends"] == 8.5
+    assert jun["interest"] == 2.0
+    assert jun["total"] == 10.5
+    jul = [m for m in income["monthly"] if m["month"] == "2025-07"][0]
+    assert jul["saveback"] == 3.0
+    assert len(income["dividends"]) == 1
+    d = income["dividends"][0]
+    assert d["gross"] == 10.0
+    assert d["wht"] == 1.5
+    assert d["net"] == 8.5
+    assert d["currency"] == "USD"
+
+
+def test_yield_on_cost_for_open_product():
+    df = _make_df([
+        {"datetime": pd.Timestamp("2025-06-01", tz="UTC"), "tx_type": "BUY", "name": "ABC", "symbol": "US1",
+         "asset_class": "STOCK", "shares": 10.0, "price": 100.0, "amount": -1000.0, "fee": 0.0, "tax": 0.0},
+        {"datetime": pd.Timestamp("2025-07-01", tz="UTC"), "tx_type": "DIVIDEND", "name": "ABC", "symbol": "US1",
+         "asset_class": "STOCK", "shares": 0.0, "price": 0.0, "amount": 25.0, "fee": 0.0, "tax": 0.0},
+    ])
+    result = run_engine(df)
+    p = result["products"][0]
+    assert p["yield_on_cost"] == 2.5

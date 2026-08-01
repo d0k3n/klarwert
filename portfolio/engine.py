@@ -303,6 +303,14 @@ def run_engine(df):
         per_product[isin]["total_dividend_tax"] = round(per_product[isin]["total_dividend_tax"], 2)
         per_product[isin]["total_dividends_net"] = round(per_product[isin]["total_dividends_net"], 2)
 
+    open_cost_by_isin = {p["isin"]: p["total_cost"] for p in open_positions}
+    for isin, p in per_product.items():
+        cost = open_cost_by_isin.get(isin)
+        if cost and cost > 0:
+            p["yield_on_cost"] = round(100 * p["total_dividends_net"] / cost, 2)
+        else:
+            p["yield_on_cost"] = None
+
     total_realized_pl = sum(cp["total_realized_pl"] for cp in closed_positions.values())
 
     summary = _compute_summary(df, cash_rows)
@@ -366,6 +374,43 @@ def run_engine(df):
         "monthly_pl": [{"month": m, "realized_pl": round(v, 2)} for m, v in sorted(monthly_pl.items())],
         "lot_matches": lot_matches,
     }
+
+
+def compute_income(df):
+    monthly = defaultdict(lambda: {"dividends": 0.0, "interest": 0.0, "saveback": 0.0})
+    dividends = []
+    for _, row in df.iterrows():
+        month = row["datetime"].strftime("%Y-%m")
+        amount = row["amount"] if not _isna(row["amount"]) else 0.0
+        if row["tx_type"] == "DIVIDEND":
+            wht = abs(row["tax"]) if not _isna(row["tax"]) else 0.0
+            monthly[month]["dividends"] += amount - wht
+            currency = row.get("original_currency") or row.get("currency") or ""
+            dividends.append({
+                "date": row["datetime"].isoformat()[:10],
+                "name": row["name"],
+                "isin": row["symbol"],
+                "gross": round(amount, 2),
+                "wht": round(wht, 2),
+                "net": round(amount - wht, 2),
+                "currency": currency,
+            })
+        elif row["tx_type"] == "INTEREST":
+            monthly[month]["interest"] += amount
+        elif row["tx_type"] == "SAVEBACK":
+            monthly[month]["saveback"] += amount
+    monthly_list = [
+        {
+            "month": m,
+            "dividends": round(v["dividends"], 2),
+            "interest": round(v["interest"], 2),
+            "saveback": round(v["saveback"], 2),
+            "total": round(v["dividends"] + v["interest"] + v["saveback"], 2),
+        }
+        for m, v in sorted(monthly.items())
+    ]
+    dividends.sort(key=lambda x: x["date"], reverse=True)
+    return {"monthly": monthly_list, "dividends": dividends}
 
 
 def compute_derivative_executions(df, knocked_ids):

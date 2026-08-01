@@ -118,6 +118,7 @@
       <th data-sort="total_realized_pl" class="num">Realized P&amp;L</th>
       <th data-sort="total_dividends" class="num">Dividends</th>
       <th data-sort="total_dividend_tax" class="num">Div. WHT</th>
+      <th data-sort="yield_on_cost" class="num">Yield %</th>
       <th data-sort="total_fees" class="num">Fees</th>
       <th data-sort="total_trades" class="num">Trades</th>
     </tr></thead>
@@ -155,6 +156,26 @@
       <h3>Dividends by Product</h3>
       <canvas id="dividend-chart"></canvas>
     </div>
+  </div>
+</section>
+
+<section>
+  <h2>Income</h2>
+  <canvas id="income-chart"></canvas>
+  <h3>Dividend History</h3>
+  <div class="table-wrapper">
+  <table id="dividend-history-table">
+  <thead><tr>
+  <th data-sort="date">Date</th>
+  <th data-sort="name">Name</th>
+  <th data-sort="isin">ISIN</th>
+  <th data-sort="gross" class="num">Gross</th>
+  <th data-sort="wht" class="num">WHT</th>
+  <th data-sort="net" class="num">Net</th>
+  <th data-sort="currency">Ccy</th>
+  </tr></thead>
+  <tbody></tbody>
+  </table>
   </div>
 </section>
 

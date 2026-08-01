@@ -17,6 +17,7 @@ let cashFlowChart = null;
 let monthlyPLChart = null;
 let allocationChart = null;
 let dividendChart = null;
+let incomeChart = null;
 
 const TABLE_CONFIGS = {
   'open-positions-table': {
@@ -34,6 +35,7 @@ const TABLE_CONFIGS = {
     groupColumns: ['asset_class', 'status'],
     groupLabels: { asset_class: 'Asset Class', status: 'Status' },
     numericFields: ['total_invested', 'total_realized_pl', 'total_dividends', 'total_dividend_tax', 'total_fees', 'total_trades'],
+    averageFields: ['yield_on_cost'],
   },
   'derivative-executions-table': {
     groupColumns: ['asset_class', 'reconciled'],
@@ -58,7 +60,7 @@ const TABLE_CONFIGS = {
 };
 
 async function loadAllData() {
-const [summary, valuedPositions, closedPositions, cashFlow, transactions, products, monthlyPl, derivativeExecutions, cardTransactions, lotMatches, perfData] = await Promise.all([
+const [summary, valuedPositions, closedPositions, cashFlow, transactions, products, monthlyPl, derivativeExecutions, cardTransactions, lotMatches, perfData, income] = await Promise.all([
 loadJSON(`${BASE}/api/summary`),
 loadJSON(`${BASE}/api/valued_positions`),
 loadJSON(`${BASE}/api/closed_positions`),
@@ -70,6 +72,7 @@ loadJSON(`${BASE}/api/derivative_executions`),
 loadJSON(`${BASE}/api/card_transactions`),
 loadJSON(`${BASE}/api/lot_matches`),
 loadJSON(`${BASE}/api/performance`),
+loadJSON(`${BASE}/api/income`),
 ]);
 
 const empty = !summary || Object.keys(summary).length === 0;
@@ -92,6 +95,8 @@ renderMonthlyPLChart(monthlyPl);
 renderTable("product-results-table", products, TABLE_CONFIGS['product-results-table']);
 renderAllocationChart(openPositions);
 renderDividendChart(products);
+renderIncomeChart(income.monthly);
+renderTable("dividend-history-table", income.dividends, null);
 renderTable("derivative-executions-table", derivativeExecutions, TABLE_CONFIGS['derivative-executions-table']);
 renderTable("lot-matches-table", lotMatches, TABLE_CONFIGS['lot-matches-table']);
 renderTable("card-expenses-table", cardTransactions, TABLE_CONFIGS['card-expenses-table']);
@@ -263,7 +268,8 @@ function insertGroupDropdown(table, config, onChange) {
 
 function formatVal(key, val) {
   if (typeof val !== 'number') return val ?? '';
-  if (key === 'average_cost' || key.endsWith('_cost') || key === 'total_realized_pl' || key === 'total_invested' || key === 'total_dividends' || key === 'total_dividend_tax' || key === 'total_dividends_net' || key === 'total_fees' || key === 'amount' || key === 'price' || key === 'ko_total' || key === 'warrant_return' || key === 'net_result' || key === 'proceeds' || key === 'cost_basis' || key === 'pl' || key === 'market_value' || key === 'unrealized_pl' || key === 'market_price') {
+  if (key === 'yield_on_cost') return val == null ? '' : `${val.toFixed(2)}%`;
+  if (key === 'average_cost' || key.endsWith('_cost') || key === 'total_realized_pl' || key === 'total_invested' || key === 'total_dividends' || key === 'total_dividend_tax' || key === 'total_dividends_net' || key === 'total_fees' || key === 'amount' || key === 'price' || key === 'ko_total' || key === 'warrant_return' || key === 'net_result' || key === 'proceeds' || key === 'cost_basis' || key === 'pl' || key === 'market_value' || key === 'unrealized_pl' || key === 'market_price' || key === 'gross' || key === 'wht' || key === 'net') {
     return `\u20AC${val.toLocaleString(undefined, {minimumFractionDigits: 2, maximumFractionDigits: 2})}`;
   }
   if (key === 'shares' || key === 'total_shares_sold') {
@@ -708,6 +714,33 @@ function renderDividendChart(products) {
       scales: {
         x: { beginAtZero: true, ticks: { color: "#8b949e" }, grid: { color: "#21262d" } },
         y: { ticks: { color: "#8b949e" }, grid: { color: "#21262d" } },
+      },
+    },
+  });
+}
+
+function renderIncomeChart(monthly) {
+  if (incomeChart) incomeChart.destroy();
+  const ctx = document.getElementById("income-chart").getContext("2d");
+  incomeChart = new Chart(ctx, {
+    type: "bar",
+    data: {
+      labels: monthly.map(d => d.month),
+      datasets: [
+        { label: "Dividends (net)", data: monthly.map(d => d.dividends), backgroundColor: "#bc8cff" },
+        { label: "Interest", data: monthly.map(d => d.interest), backgroundColor: "#7ee787" },
+        { label: "Saveback", data: monthly.map(d => d.saveback), backgroundColor: "#58a6ff" },
+      ],
+    },
+    options: {
+      responsive: true,
+      plugins: {
+        legend: { position: "top", labels: { color: "#8b949e" } },
+        tooltip: { backgroundColor: "#21262d", titleColor: "#e6edf3", bodyColor: "#e6edf3" },
+      },
+      scales: {
+        x: { stacked: true, ticks: { color: "#8b949e" }, grid: { color: "#21262d" } },
+        y: { stacked: true, beginAtZero: true, ticks: { color: "#8b949e" }, grid: { color: "#21262d" } },
       },
     },
   });
