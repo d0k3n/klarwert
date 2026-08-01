@@ -69,7 +69,17 @@ python desktop_app.py
 python build.py
 ```
 
-The built binary lands in `dist/` as `Klarwert` (your current `build`/`dist` folders are git-ignored).
+The built binary lands in `dist/` as `Klarwert` (your current `build`/`dist` folders are git-ignored). This builds only for the OS you are on - PyInstaller cannot cross-compile.
+
+### Automated release builds (GitHub Actions)
+
+Tag a release with `v*` (e.g. `git tag v1.0.0 && git push origin v1.0.0`) and CI builds standalone binaries for **Windows, macOS, and Linux** and attaches them to the GitHub Release. End users download the file for their OS and double-click - no Python or command line needed.
+
+- `Klarwert-windows.exe` - Windows
+- `Klarwert-macos.app.zip` - macOS
+- `Klarwert-linux` - Linux (requires GTK/WebKit system libs)
+
+You can also trigger the build manually from the Actions tab (`workflow_dispatch`) to test without tagging.
 
 ## Loading your data
 

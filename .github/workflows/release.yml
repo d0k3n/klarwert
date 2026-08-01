@@ -1,0 +1,90 @@
+name: Build & Release
+
+on:
+  push:
+    tags:
+      - "v*"
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  build:
+    name: Build (${{ matrix.os }})
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - os: windows-latest
+            file: Klarwert.exe
+            asset: Klarwert-windows.exe
+          - os: macos-latest
+            file: Klarwert.app
+            asset: Klarwert-macos.app.zip
+          - os: ubuntu-latest
+            file: Klarwert
+            asset: Klarwert-linux
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Install Linux system dependencies
+        if: matrix.os == 'ubuntu-latest'
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y libgtk-3-dev libwebkit2gtk-4.1-dev gir1.2-webkit2-4.1
+
+      - name: Install dependencies
+        run: pip install -r requirements.txt pygobject
+
+      - name: Run tests
+        run: python -m pytest -q
+
+      - name: Build executable
+        run: python build.py
+
+      - name: Package artifact
+        shell: bash
+        run: |
+          set -e
+          if [ "${{ matrix.os }}" = "macos-latest" ]; then
+            ditto -c -k --sequesterRsrc --keepParent dist/Klarwert.app dist/${{ matrix.asset }}
+          else
+            cp "dist/Klarwert$([ "${{ matrix.os }}" = "windows-latest" ] && echo .exe)" "dist/${{ matrix.asset }}"
+          fi
+          ls -la dist
+
+      - name: Upload artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: Klarwert-${{ matrix.os }}
+          path: dist/${{ matrix.asset }}
+
+  release:
+    name: Publish release
+    needs: build
+    if: startsWith(github.ref, 'refs/tags/')
+    runs-on: ubuntu-latest
+    steps:
+      - name: Download artifacts
+        uses: actions/download-artifact@v4
+        with:
+          path: artifacts
+          merge-multiple: true
+
+      - name: List artifacts
+        run: ls -la artifacts
+
+      - name: Create GitHub Release
+        uses: softprops/action-gh-release@v2
+        with:
+          files: artifacts/*
+          generate_release_notes: true
