@@ -1,4 +1,5 @@
 import os
+import time
 from pathlib import Path
 
 import requests
@@ -106,35 +107,30 @@ def to_eur(amount, currency, session=None):
     return amount * fx_rate(currency, session)
 
 
-def refresh_prices(positions, existing_prices, ticker_cache, session=None):
+def refresh_prices(positions, existing_prices, ticker_cache, session=None, delay=1.1):
     if not is_configured():
-        return {"prices": {}, "tickers": {}, "skipped": [], "disabled": True}
+        return {"disabled": True, "prices": {}, "tickers": {}, "skipped": []}
     session = session or requests.Session()
     prices = {}
     tickers = {}
     skipped = []
-    for pos in positions:
-        isin = pos.get("isin", "")
-        ticker = (ticker_cache or {}).get(isin)
-        if not ticker:
-            try:
-                ticker = resolve_ticker(isin, session)
-            except Exception as e:
-                skipped.append({"isin": isin, "reason": str(e)})
-                continue
-        if not ticker:
-            skipped.append({"isin": isin, "reason": "no_ticker"})
-            continue
-        if isin not in tickers:
-            tickers[isin] = ticker
-        existing = (existing_prices or {}).get(isin, {})
-        if isinstance(existing, dict) and existing.get("source") == "manual":
+    for p in positions:
+        isin = p["isin"]
+        entry = existing_prices.get(isin)
+        if isinstance(entry, dict) and entry.get("source") == "manual":
             skipped.append({"isin": isin, "reason": "manual"})
             continue
         try:
-            price, currency = fetch_price(ticker, session)
-            eur_price = to_eur(price, currency, session)
-            prices[isin] = {"price": round(eur_price, 4), "source": "finnhub"}
-        except Exception as e:
-            skipped.append({"isin": isin, "reason": str(e)})
+            ticker = ticker_cache.get(isin) or resolve_ticker(isin, session)
+            if not ticker:
+                skipped.append({"isin": isin, "reason": "unresolved"})
+                continue
+            native, currency = fetch_price(ticker, session)
+            price = to_eur(native, currency, session)
+            prices[isin] = {"price": round(float(price), 6), "source": "auto"}
+            tickers[isin] = ticker
+        except Exception as exc:
+            skipped.append({"isin": isin, "reason": "fetch_error", "message": f"{type(exc).__name__}: {exc}"})
+        if delay:
+            time.sleep(delay)
     return {"prices": prices, "tickers": tickers, "skipped": skipped}

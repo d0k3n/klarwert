@@ -136,71 +136,76 @@ def test_infer_currency_suffixes():
     assert _infer_currency("7203.T") == "JPY"
 
 
-from portfolio.market import refresh_prices, to_eur
+import portfolio.market as market
+from portfolio.market import refresh_prices
 
 
-def test_refresh_prices_disabled_without_key():
-    result = refresh_prices([{"isin": "A", "name": "A"}], {}, {})
-    assert result == {"prices": {}, "tickers": {}, "skipped": [], "disabled": True}
+def test_refresh_disabled_without_key(monkeypatch):
+    monkeypatch.setattr(market, "get_api_key", lambda: None)
+    s = FakeSession([])
+    out = refresh_prices([{"isin": "A", "name": "A"}], {}, {}, s, delay=0)
+    assert out["disabled"] is True
 
 
-def test_refresh_prices_fetches_eur_position(keyed):
-    s = FakeSession([
-        ("/search", _search("ISL.DE", "Common Stock")),
-        ("/quote", {"c": 42.0}),
-        ("/stock/profile2", {"currency": "EUR"}),
-    ])
-    result = refresh_prices([{"isin": "US1", "name": "ISLA"}], {}, {}, s)
-    assert result["prices"]["US1"]["price"] == 42.0
-    assert result["prices"]["US1"]["source"] == "finnhub"
-    assert result["tickers"]["US1"] == "ISL.DE"
-    assert result["skipped"] == []
-
-
-def test_refresh_prices_uses_ticker_cache_without_search(keyed):
-    s = FakeSession([
-        ("/quote", {"c": 10.0}),
-        ("/stock/profile2", {"currency": "EUR"}),
-    ])
-    result = refresh_prices([{"isin": "US1", "name": "ISLA"}], {}, {"US1": "AAPL"}, s)
-    search_calls = [u for u, _ in s.calls if "/search" in u]
-    assert search_calls == []
-    assert result["tickers"]["US1"] == "AAPL"
-
-
-def test_refresh_prices_skips_manual_existing(keyed):
-    s = FakeSession([
-        ("/search", _search("AAPL", "Common Stock")),
-        ("/quote", {"c": 10.0}),
-        ("/stock/profile2", {"currency": "EUR"}),
-    ])
-    result = refresh_prices([{"isin": "US1", "name": "ISLA"}], {"US1": {"price": 99.0, "source": "manual"}}, {}, s)
-    assert "US1" not in result["prices"]
-    assert result["skipped"][0]["reason"] == "manual"
-
-
-def test_refresh_prices_skips_missing_ticker(keyed):
-    s = FakeSession([("/search", {"count": 0, "result": []})])
-    result = refresh_prices([{"isin": "US1", "name": "ISLA"}], {}, {}, s)
-    assert "US1" not in result["prices"]
-    assert result["skipped"][0]["reason"] == "no_ticker"
-
-
-def test_to_eur_converts_non_eur_currency():
-    s = FakeSession([("/v1/latest", {"rates": {"EUR": 1.1}})])
-    assert to_eur(10.0, "GBP", s) == pytest.approx(11.0)
-    assert to_eur(10.0, "EUR", s) == 10.0
-
-
-def test_refresh_prices_converts_fx_to_eur(keyed):
+def test_refresh_converts_usd_and_keys_by_isin(keyed):
+    positions = [{"isin": "IE00B5BMR087", "name": "S&P"}]
     s = FakeSession([
         ("/search", _search("CSPX.L", "ETP")),
-        ("/quote", {"c": 20.0}),
-        ("/stock/profile2", {"currency": "GBP"}),
-        ("/v1/latest", {"rates": {"EUR": 1.2}}),
+        ("/quote", {"c": 10.0}),
+        ("/stock/profile2", {"currency": "USD"}),
+        ("api.frankfurter.dev", {"rates": {"EUR": 1.08}}),
     ])
-    result = refresh_prices([{"isin": "US1", "name": "CSPX"}], {}, {}, s)
-    assert result["prices"]["US1"]["price"] == pytest.approx(24.0)
+    out = refresh_prices(positions, {}, {}, s, delay=0)
+    assert out["prices"]["IE00B5BMR087"]["source"] == "auto"
+    assert out["tickers"]["IE00B5BMR087"] == "CSPX.L"
+    assert abs(out["prices"]["IE00B5BMR087"]["price"] - 10.8) < 1e-6
+
+
+def test_refresh_does_not_overwrite_manual(keyed):
+    positions = [{"isin": "A", "name": "A"}]
+    existing = {"A": {"price": 5.0, "source": "manual"}}
+    s = FakeSession([("/search", _search("IGNORED", "Common Stock"))])
+    out = refresh_prices(positions, existing, {}, s, delay=0)
+    assert "A" not in out["prices"]
+    assert any(item["reason"] == "manual" for item in out["skipped"])
+
+
+def test_refresh_skips_unresolved(keyed):
+    positions = [{"isin": "NOPE", "name": "X"}]
+    s = FakeSession([("/search", {"count": 0, "result": []})])
+    out = refresh_prices(positions, {}, {}, s, delay=0)
+    assert out["prices"] == {}
+    assert out["skipped"][0]["reason"] == "unresolved"
+
+
+def test_refresh_reuses_ticker_cache(keyed):
+    positions = [{"isin": "A", "name": "A"}]
+    s = FakeSession([
+        ("/quote", {"c": 9.0}),
+        ("/stock/profile2", {"currency": "EUR"}),
+    ])
+    out = refresh_prices(positions, {}, {"A": "AAPL"}, s, delay=0)
+    assert out["tickers"]["A"] == "AAPL"
+    assert not any("/search" in url for url, _ in s.calls)
+
+
+class RaisingResp(FakeResp):
+    def raise_for_status(self):
+        raise Exception("HTTP 429")
+
+
+class RaisingSession(FakeSession):
+    def get(self, url, params=None, timeout=None):
+        return RaisingResp({"count": 0})
+
+
+def test_refresh_isolates_network_failure_per_isin(keyed):
+    positions = [{"isin": "A", "name": "A"}, {"isin": "B", "name": "B"}]
+    s = RaisingSession([])
+    out = refresh_prices(positions, {}, {}, s, delay=0)
+    assert out["prices"] == {}
+    assert len(out["skipped"]) == 2
+    assert all(item["reason"] == "fetch_error" for item in out["skipped"])
 
 
 from portfolio.market import fx_rate, to_eur
