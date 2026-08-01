@@ -9,6 +9,7 @@ from flask import Flask, jsonify, request, send_from_directory
 
 from portfolio.parser import parse_csv
 from portfolio.engine import run_engine, compute_derivative_executions, compute_card_transactions, auto_detect_knocked
+from portfolio.tax_report import build_tax_report
 import licensing as license_module
 
 logging.basicConfig(level=logging.INFO, format="%(levelname)s: %(message)s")
@@ -216,6 +217,18 @@ def api_knocked_down_toggle():
     KD_PATH.write_text(json.dumps({"ids": sorted(ids)}), encoding="utf-8")
     invalidate_cache()
     return jsonify({"ok": True, "flagged": txn_id in ids})
+
+
+@app.route("/api/tax_report")
+def api_tax_report():
+    if df is None:
+        return jsonify({"year": None, "disposals": [], "disposal_totals": {},
+                        "dividends": [], "dividend_totals": {}, "interest": 0.0, "saveback": 0.0})
+    year = request.args.get("year", type=int)
+    if not year:
+        year = int(df["datetime"].max().year)
+    result = compute_data(load_knocked_ids())
+    return jsonify(build_tax_report(df, result["lot_matches"], year))
 
 
 @app.route("/api/card_transactions")

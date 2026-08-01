@@ -689,3 +689,43 @@ function renderDividendChart(products) {
     },
   });
 }
+
+let lastTaxReport = null;
+
+window.loadTaxReport = async function () {
+const yearInput = document.getElementById("tax-year");
+if (!yearInput.value) yearInput.value = new Date().getFullYear();
+const report = await loadJSON(`${BASE}/api/tax_report?year=${yearInput.value}`);
+lastTaxReport = report;
+renderTable("tax-disposals-table", report.disposals, null);
+const tbody = document.querySelector("#tax-income-table tbody");
+tbody.innerHTML = "";
+const eur = v => `\u20AC${(v || 0).toLocaleString(undefined, {minimumFractionDigits: 2, maximumFractionDigits: 2})}`;
+const t = report.dividend_totals;
+[
+  ["Dividends", t.gross, t.wht, t.net],
+  ["Interest", report.interest, 0, report.interest],
+  ["Saveback", report.saveback, 0, report.saveback],
+].forEach(([label, g, w, n]) => {
+  const tr = document.createElement("tr");
+  tr.innerHTML = `<td>${label}</td><td class="num">${eur(g)}</td><td class="num">${eur(w)}</td><td class="num">${eur(n)}</td>`;
+  tbody.appendChild(tr);
+});
+};
+
+window.downloadTaxCsv = function () {
+if (!lastTaxReport) return;
+const lines = ["date;name;isin;shares;proceeds;cost_basis;fees;gain;acquired"];
+lastTaxReport.disposals.forEach(d => {
+  lines.push([d.date, d.name, d.isin, d.shares, d.proceeds, d.cost_basis, d.fees, d.gain, d.acquired].join(";"));
+});
+lines.push("");
+lines.push("type;gross;wht;net");
+lines.push(`dividends;${lastTaxReport.dividend_totals.gross};${lastTaxReport.dividend_totals.wht};${lastTaxReport.dividend_totals.net}`);
+lines.push(`interest;${lastTaxReport.interest};;${lastTaxReport.interest}`);
+const blob = new Blob([lines.join("\n")], { type: "text/csv" });
+const a = document.createElement("a");
+a.href = URL.createObjectURL(blob);
+a.download = `tax_report_${lastTaxReport.year}.csv`;
+a.click();
+};

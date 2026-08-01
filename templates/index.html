@@ -189,6 +189,38 @@
 </section>
 
 <section>
+<h2>Tax Report</h2>
+<div>
+  <label for="tax-year">Year:</label>
+  <input type="number" id="tax-year" min="2000" max="2100" step="1">
+  <button id="tax-report-btn" onclick="window.loadTaxReport()">Load</button>
+  <button id="tax-csv-btn" onclick="window.downloadTaxCsv()">Download CSV</button>
+</div>
+<div class="table-wrapper">
+<table id="tax-disposals-table">
+<thead><tr>
+<th data-sort="date">Date</th>
+<th data-sort="name">Name</th>
+<th data-sort="isin">ISIN</th>
+<th data-sort="shares" class="num">Shares</th>
+<th data-sort="proceeds" class="num">Proceeds</th>
+<th data-sort="cost_basis" class="num">Cost Basis</th>
+<th data-sort="fees" class="num">Fees</th>
+<th data-sort="gain" class="num">Gain</th>
+<th data-sort="acquired">Acquired</th>
+</tr></thead>
+<tbody></tbody>
+</table>
+</div>
+<div class="table-wrapper">
+<table id="tax-income-table">
+<thead><tr><th>Type</th><th class="num">Gross</th><th class="num">WHT</th><th class="num">Net</th></tr></thead>
+<tbody></tbody>
+</table>
+</div>
+</section>
+
+<section>
 <h2>Recent Transactions</h2>
 <input type="text" id="tx-filter" placeholder="Filter by symbol or name...">
 <table id="transactions-table">
