@@ -134,3 +134,111 @@ def test_infer_currency_suffixes():
     assert _infer_currency("VOW.DE") == "EUR"
     assert _infer_currency("AAPL") == "USD"
     assert _infer_currency("7203.T") == "JPY"
+
+
+from portfolio.market import refresh_prices, to_eur
+
+
+def test_refresh_prices_disabled_without_key():
+    result = refresh_prices([{"isin": "A", "name": "A"}], {}, {})
+    assert result == {"prices": {}, "tickers": {}, "skipped": [], "disabled": True}
+
+
+def test_refresh_prices_fetches_eur_position(keyed):
+    s = FakeSession([
+        ("/search", _search("ISL.DE", "Common Stock")),
+        ("/quote", {"c": 42.0}),
+        ("/stock/profile2", {"currency": "EUR"}),
+    ])
+    result = refresh_prices([{"isin": "US1", "name": "ISLA"}], {}, {}, s)
+    assert result["prices"]["US1"]["price"] == 42.0
+    assert result["prices"]["US1"]["source"] == "finnhub"
+    assert result["tickers"]["US1"] == "ISL.DE"
+    assert result["skipped"] == []
+
+
+def test_refresh_prices_uses_ticker_cache_without_search(keyed):
+    s = FakeSession([
+        ("/quote", {"c": 10.0}),
+        ("/stock/profile2", {"currency": "EUR"}),
+    ])
+    result = refresh_prices([{"isin": "US1", "name": "ISLA"}], {}, {"US1": "AAPL"}, s)
+    search_calls = [u for u, _ in s.calls if "/search" in u]
+    assert search_calls == []
+    assert result["tickers"]["US1"] == "AAPL"
+
+
+def test_refresh_prices_skips_manual_existing(keyed):
+    s = FakeSession([
+        ("/search", _search("AAPL", "Common Stock")),
+        ("/quote", {"c": 10.0}),
+        ("/stock/profile2", {"currency": "EUR"}),
+    ])
+    result = refresh_prices([{"isin": "US1", "name": "ISLA"}], {"US1": {"price": 99.0, "source": "manual"}}, {}, s)
+    assert "US1" not in result["prices"]
+    assert result["skipped"][0]["reason"] == "manual"
+
+
+def test_refresh_prices_skips_missing_ticker(keyed):
+    s = FakeSession([("/search", {"count": 0, "result": []})])
+    result = refresh_prices([{"isin": "US1", "name": "ISLA"}], {}, {}, s)
+    assert "US1" not in result["prices"]
+    assert result["skipped"][0]["reason"] == "no_ticker"
+
+
+def test_to_eur_converts_non_eur_currency():
+    s = FakeSession([("/v1/latest", {"rates": {"EUR": 1.1}})])
+    assert to_eur(10.0, "GBP", s) == pytest.approx(11.0)
+    assert to_eur(10.0, "EUR", s) == 10.0
+
+
+def test_refresh_prices_converts_fx_to_eur(keyed):
+    s = FakeSession([
+        ("/search", _search("CSPX.L", "ETP")),
+        ("/quote", {"c": 20.0}),
+        ("/stock/profile2", {"currency": "GBP"}),
+        ("/v1/latest", {"rates": {"EUR": 1.2}}),
+    ])
+    result = refresh_prices([{"isin": "US1", "name": "CSPX"}], {}, {}, s)
+    assert result["prices"]["US1"]["price"] == pytest.approx(24.0)
+
+
+from portfolio.market import fx_rate, to_eur
+
+
+def _fx_routes():
+    return [("api.frankfurter.dev", {"rates": {"EUR": 1.08}})]
+
+
+def test_fx_rate_returns_eur_for_eur():
+    s = FakeSession([])
+    assert fx_rate("EUR", s) == 1.0
+
+
+def test_fx_rate_fetches_and_caches(monkeypatch):
+    monkeypatch.setenv("FINNHUB_API_KEY", "unused")
+    s = FakeSession(_fx_routes())
+    assert fx_rate("USD", s) == 1.08
+    assert fx_rate("USD", s) == 1.08
+    assert len(s.calls) == 1  # cached, no second network call
+
+
+def test_to_eur_leaves_eur_alone():
+    s = FakeSession([])
+    assert to_eur(100.0, "EUR", s) == 100.0
+
+
+def test_to_eur_converts_usd():
+    s = FakeSession(_fx_routes())
+    assert abs(to_eur(100.0, "USD", s) - 108.0) < 1e-9
+
+
+def test_to_eur_converts_gbp(monkeypatch):
+    monkeypatch.setenv("FINNHUB_API_KEY", "unused")
+    s = FakeSession([("api.frankfurter.dev", {"rates": {"EUR": 1.1686}})])
+    assert abs(to_eur(100.0, "GBP", s) - 116.86) < 1e-9
+
+
+def test_to_eur_handles_missing_currency():
+    s = FakeSession([])
+    assert to_eur(100.0, "", s) == 100.0

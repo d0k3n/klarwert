@@ -83,3 +83,58 @@ def fetch_price(ticker, session=None):
     price = float(data["c"])
     currency = _profile_currency(session, ticker) or _infer_currency(ticker)
     return price, currency
+
+
+def fx_rate(currency, session=None):
+    session = session or requests.Session()
+    cur = (currency or "EUR").upper()
+    if cur == "EUR":
+        return 1.0
+    cache = getattr(session, "_fx_cache", None)
+    if cache is None:
+        cache = session._fx_cache = {}
+    if cur in cache:
+        return cache[cur]
+    resp = session.get(FRANKFURTER_URL, params={"base": cur, "symbols": "EUR"}, timeout=10)
+    resp.raise_for_status()
+    rate = float(resp.json()["rates"]["EUR"])
+    cache[cur] = rate
+    return rate
+
+
+def to_eur(amount, currency, session=None):
+    return amount * fx_rate(currency, session)
+
+
+def refresh_prices(positions, existing_prices, ticker_cache, session=None):
+    if not is_configured():
+        return {"prices": {}, "tickers": {}, "skipped": [], "disabled": True}
+    session = session or requests.Session()
+    prices = {}
+    tickers = {}
+    skipped = []
+    for pos in positions:
+        isin = pos.get("isin", "")
+        ticker = (ticker_cache or {}).get(isin)
+        if not ticker:
+            try:
+                ticker = resolve_ticker(isin, session)
+            except Exception as e:
+                skipped.append({"isin": isin, "reason": str(e)})
+                continue
+        if not ticker:
+            skipped.append({"isin": isin, "reason": "no_ticker"})
+            continue
+        if isin not in tickers:
+            tickers[isin] = ticker
+        existing = (existing_prices or {}).get(isin, {})
+        if isinstance(existing, dict) and existing.get("source") == "manual":
+            skipped.append({"isin": isin, "reason": "manual"})
+            continue
+        try:
+            price, currency = fetch_price(ticker, session)
+            eur_price = to_eur(price, currency, session)
+            prices[isin] = {"price": round(eur_price, 4), "source": "finnhub"}
+        except Exception as e:
+            skipped.append({"isin": isin, "reason": str(e)})
+    return {"prices": prices, "tickers": tickers, "skipped": skipped}
