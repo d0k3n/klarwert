@@ -376,6 +376,44 @@ def run_engine(df):
     }
 
 
+MCC_CATEGORIES = {
+    "5411": "Groceries", "5499": "Groceries", "5412": "Groceries",
+    "5812": "Restaurants", "5814": "Fast Food", "5813": "Bars",
+    "5541": "Fuel", "5542": "Fuel",
+    "4111": "Public Transport", "4121": "Taxi & Rideshare", "4789": "Transport",
+    "5311": "Department Stores", "5651": "Clothing", "5732": "Electronics",
+    "5912": "Pharmacy", "5977": "Cosmetics",
+    "4814": "Telecom", "4899": "Streaming & TV",
+    "5734": "Software", "7372": "Software", "5817": "Digital Goods", "5818": "Digital Goods",
+    "6011": "ATM Withdrawal", "4900": "Utilities",
+    "7832": "Cinema", "7941": "Sports", "7922": "Events",
+    "5944": "Jewelry", "5999": "Misc Shopping", "5947": "Gifts",
+    "7011": "Hotels", "3000": "Travel", "4511": "Travel",
+}
+
+
+def compute_spending(df):
+    card = df[df["tx_type"] == "CARD"]
+    by_category = defaultdict(float)
+    by_month = defaultdict(float)
+    for _, row in card.iterrows():
+        amount = row["amount"] if not _isna(row["amount"]) else 0.0
+        mcc = str(row.get("mcc_code", "") or "").strip()
+        category = MCC_CATEGORIES.get(mcc, "Other")
+        by_category[category] += -amount
+        by_month[row["datetime"].strftime("%Y-%m")] += -amount
+    categories = [
+        {"category": c, "total": round(t, 2)}
+        for c, t in sorted(by_category.items(), key=lambda kv: kv[1], reverse=True)
+        if abs(t) > 0.005
+    ]
+    monthly = [
+        {"month": m, "total": round(t, 2)}
+        for m, t in sorted(by_month.items())
+    ]
+    return {"by_category": categories, "monthly": monthly}
+
+
 def compute_income(df):
     monthly = defaultdict(lambda: {"dividends": 0.0, "interest": 0.0, "saveback": 0.0})
     dividends = []

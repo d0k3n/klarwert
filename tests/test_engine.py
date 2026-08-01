@@ -1,5 +1,5 @@
 import pandas as pd
-from portfolio.engine import run_engine, auto_detect_knocked, compute_derivative_executions, apply_prices, compute_income
+from portfolio.engine import run_engine, auto_detect_knocked, compute_derivative_executions, apply_prices, compute_income, compute_spending
 
 
 def _make_df(rows):
@@ -736,3 +736,27 @@ def test_yield_on_cost_for_open_product():
     result = run_engine(df)
     p = result["products"][0]
     assert p["yield_on_cost"] == 2.5
+
+
+def test_compute_spending_categories_and_refunds():
+    df = _make_df([
+        {"datetime": pd.Timestamp("2025-06-01", tz="UTC"), "tx_type": "CARD", "name": "INTERMARCHE", "symbol": "",
+         "asset_class": "", "shares": 0.0, "price": 0.0, "amount": -50.0, "fee": 0.0, "tax": 0.0,
+         "mcc_code": "5411"},
+        {"datetime": pd.Timestamp("2025-06-02", tz="UTC"), "tx_type": "CARD", "name": "RESTAURANT", "symbol": "",
+         "asset_class": "", "shares": 0.0, "price": 0.0, "amount": -30.0, "fee": 0.0, "tax": 0.0,
+         "mcc_code": "5812"},
+        {"datetime": pd.Timestamp("2025-06-03", tz="UTC"), "tx_type": "CARD", "name": "INTERMARCHE", "symbol": "",
+         "asset_class": "", "shares": 0.0, "price": 0.0, "amount": 10.0, "fee": 0.0, "tax": 0.0,
+         "mcc_code": "5411"},
+        {"datetime": pd.Timestamp("2025-06-04", tz="UTC"), "tx_type": "CARD", "name": "UNKNOWN SHOP", "symbol": "",
+         "asset_class": "", "shares": 0.0, "price": 0.0, "amount": -5.0, "fee": 0.0, "tax": 0.0,
+         "mcc_code": ""},
+    ])
+    spending = compute_spending(df)
+    by_cat = {c["category"]: c["total"] for c in spending["by_category"]}
+    assert by_cat["Groceries"] == 40.0
+    assert by_cat["Restaurants"] == 30.0
+    assert by_cat["Other"] == 5.0
+    jun = [m for m in spending["monthly"] if m["month"] == "2025-06"][0]
+    assert jun["total"] == 75.0

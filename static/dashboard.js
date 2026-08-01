@@ -18,6 +18,8 @@ let monthlyPLChart = null;
 let allocationChart = null;
 let dividendChart = null;
 let incomeChart = null;
+let spendingCatChart = null;
+let spendingMonthChart = null;
 
 const TABLE_CONFIGS = {
   'open-positions-table': {
@@ -60,7 +62,7 @@ const TABLE_CONFIGS = {
 };
 
 async function loadAllData() {
-const [summary, valuedPositions, closedPositions, cashFlow, transactions, products, monthlyPl, derivativeExecutions, cardTransactions, lotMatches, perfData, income] = await Promise.all([
+const [summary, valuedPositions, closedPositions, cashFlow, transactions, products, monthlyPl, derivativeExecutions, cardTransactions, lotMatches, perfData, income, spending] = await Promise.all([
 loadJSON(`${BASE}/api/summary`),
 loadJSON(`${BASE}/api/valued_positions`),
 loadJSON(`${BASE}/api/closed_positions`),
@@ -73,6 +75,7 @@ loadJSON(`${BASE}/api/card_transactions`),
 loadJSON(`${BASE}/api/lot_matches`),
 loadJSON(`${BASE}/api/performance`),
 loadJSON(`${BASE}/api/income`),
+loadJSON(`${BASE}/api/spending`),
 ]);
 
 const empty = !summary || Object.keys(summary).length === 0;
@@ -100,6 +103,7 @@ renderTable("dividend-history-table", income.dividends, null);
 renderTable("derivative-executions-table", derivativeExecutions, TABLE_CONFIGS['derivative-executions-table']);
 renderTable("lot-matches-table", lotMatches, TABLE_CONFIGS['lot-matches-table']);
 renderTable("card-expenses-table", cardTransactions, TABLE_CONFIGS['card-expenses-table']);
+renderSpendingCharts(spending);
 }
 
 window.reloadData = async function () {
@@ -741,6 +745,50 @@ function renderIncomeChart(monthly) {
       scales: {
         x: { stacked: true, ticks: { color: "#8b949e" }, grid: { color: "#21262d" } },
         y: { stacked: true, beginAtZero: true, ticks: { color: "#8b949e" }, grid: { color: "#21262d" } },
+      },
+    },
+  });
+}
+
+function renderSpendingCharts(spending) {
+  if (spendingCatChart) spendingCatChart.destroy();
+  const catCtx = document.getElementById("spending-category-chart").getContext("2d");
+  const cats = spending.by_category || [];
+  spendingCatChart = new Chart(catCtx, {
+    type: "doughnut",
+    data: {
+      labels: cats.map(c => c.category),
+      datasets: [{
+        data: cats.map(c => c.total),
+        backgroundColor: cats.map((_, i) => CHART_COLORS[i % CHART_COLORS.length]),
+      }],
+    },
+    options: {
+      responsive: true,
+      plugins: {
+        legend: { position: "right", labels: { color: "#8b949e" } },
+        tooltip: { backgroundColor: "#21262d", titleColor: "#e6edf3", bodyColor: "#e6edf3" },
+      },
+    },
+  });
+  if (spendingMonthChart) spendingMonthChart.destroy();
+  const monCtx = document.getElementById("spending-monthly-chart").getContext("2d");
+  const months = spending.monthly || [];
+  spendingMonthChart = new Chart(monCtx, {
+    type: "bar",
+    data: {
+      labels: months.map(m => m.month),
+      datasets: [{ label: "Card Spending", data: months.map(m => m.total), backgroundColor: CHART_BLUE }],
+    },
+    options: {
+      responsive: true,
+      plugins: {
+        legend: { display: false },
+        tooltip: { backgroundColor: "#21262d", titleColor: "#e6edf3", bodyColor: "#e6edf3" },
+      },
+      scales: {
+        x: { ticks: { color: "#8b949e" }, grid: { color: "#21262d" } },
+        y: { beginAtZero: true, ticks: { color: "#8b949e" }, grid: { color: "#21262d" } },
       },
     },
   });

@@ -8,7 +8,7 @@ from pathlib import Path
 from flask import Flask, jsonify, request, send_from_directory
 
 from portfolio.parser import parse_csv
-from portfolio.engine import run_engine, compute_derivative_executions, compute_card_transactions, auto_detect_knocked, apply_prices, compute_income
+from portfolio.engine import run_engine, compute_derivative_executions, compute_card_transactions, auto_detect_knocked, apply_prices, compute_income, compute_spending
 from portfolio.tax_report import build_tax_report
 from portfolio.performance import compute_performance
 import licensing as license_module
@@ -299,6 +299,13 @@ def api_income():
     if df is None:
         return jsonify({"monthly": [], "dividends": []})
     return jsonify(compute_income(df))
+
+
+@app.route("/api/spending")
+def api_spending():
+    if df is None:
+        return jsonify({"by_category": [], "monthly": []})
+    return jsonify(compute_spending(df))
 
 
 if __name__ == "__main__":
