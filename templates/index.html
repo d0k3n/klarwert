@@ -17,19 +17,18 @@
     <span class="header-timestamp" id="header-timestamp"></span>
     <button id="support-btn" onclick="window.openSupport()">&#x2615; Support</button>
     <button id="feature-btn" onclick="window.openFeatureRequest()">Request a Feature</button>
-    <button id="reload-btn" onclick="window.reloadData()">&#x21bb; Reload Data</button>
+    <button id="load-btn" onclick="document.getElementById('csv-input').click()">
+      <svg class="btn-icon" viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+        <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/>
+        <polyline points="17 8 12 3 7 8"/>
+        <line x1="12" y1="3" x2="12" y2="15"/>
+      </svg>
+      <span>Load CSV</span>
+    </button>
+    <input id="csv-input" type="file" accept=".csv" style="display:none" onchange="window.uploadCSV(this)">
     <span id="reload-status"></span>
   </div>
 </div>
-<button id="load-btn" onclick="document.getElementById('csv-input').click()">
-  <svg class="btn-icon" viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
-    <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/>
-    <polyline points="17 8 12 3 7 8"/>
-    <line x1="12" y1="3" x2="12" y2="15"/>
-  </svg>
-  <span>Load CSV</span>
-</button>
-<input id="csv-input" type="file" accept=".csv" style="display:none" onchange="window.uploadCSV(this)">
 
 <div id="empty-state" style="display:none; margin:24px 0; padding:20px; border:1px dashed #cbd5e1; border-radius:8px; background:#f8fafc;">
   <h2>No portfolio loaded</h2>
@@ -57,8 +56,9 @@
 </section>
 
 <section>
-  <h2>Market Prices (manual)</h2>
-  <p>Enter a current price per ISIN to see market value and unrealized P&amp;L. Leave empty to clear.</p>
+  <h2>Market Prices</h2>
+  <p>Enter a price per ISIN to override, or auto-fetch current prices from Yahoo.</p>
+  <p><button id="refresh-prices-btn" onclick="refreshPrices()">Refresh prices (Yahoo)</button> <span id="price-status"></span></p>
   <div id="price-inputs"></div>
 </section>
 

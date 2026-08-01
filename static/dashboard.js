@@ -106,21 +106,6 @@ renderTable("card-expenses-table", cardTransactions, TABLE_CONFIGS['card-expense
 renderSpendingCharts(spending);
 }
 
-window.reloadData = async function () {
-const status = document.getElementById("reload-status");
-status.textContent = "Reloading...";
-try {
-const r = await fetch(`${BASE}/api/reload`, { method: "POST" });
-const data = await r.json();
-if (!data.ok) throw new Error(data.error);
-await loadAllData();
-status.textContent = `Reloaded ${data.count} transactions.`;
-setTimeout(() => status.textContent = "", 3000);
-} catch (e) {
-status.textContent = `Failed: ${e.message}`;
-}
-};
-
 window.uploadCSV = async function (input) {
 const status = document.getElementById("reload-status");
 const file = input.files && input.files[0];
@@ -314,14 +299,11 @@ function renderSummary(s) {
 const pl = s.total_realized_pl || 0;
 const spending = s.total_card_spending || 0;
 let coverage, coverageCls;
-if (pl <= 0) {
-coverage = "N/A";
-coverageCls = "";
-} else if (spending === 0) {
-coverage = "100%";
-coverageCls = "positive";
+if (pl <= 0 || spending === 0) {
+coverage = pl > 0 && spending === 0 ? "100%" : "N/A";
+coverageCls = pl > 0 && spending === 0 ? "positive" : "";
 } else {
-const pct = Math.min(100, spending / pl * 100);
+const pct = Math.min(100, pl / spending * 100);
 coverage = `${pct.toFixed(1)}%`;
 coverageCls = pct >= 100 ? "positive" : "negative";
 }
@@ -908,4 +890,30 @@ positions.forEach(p => {
   row.appendChild(input);
   container.appendChild(row);
 });
+const btn = document.getElementById("refresh-prices-btn");
+if (btn) btn.style.display = positions.length ? "" : "none";
 }
+
+window.refreshPrices = async function () {
+  const btn = document.getElementById("refresh-prices-btn");
+  const status = document.getElementById("price-status");
+  btn.disabled = true;
+  status.textContent = "Fetching...";
+  try {
+    const r = await fetch(`${BASE}/api/refresh_prices`, { method: "POST" });
+    if (!r.ok) throw new Error(`HTTP ${r.status}`);
+    const data = await r.json();
+    const updated = Object.keys(data.prices || {}).length;
+    const skipped = (data.skipped || []).length;
+    if (skipped > 0) {
+      status.textContent = `Updated ${updated}; skipped ${skipped} (manual or unresolved).`;
+    } else {
+      status.textContent = `Updated ${updated} price${updated === 1 ? "" : "s"}.`;
+    }
+    await loadAllData();
+  } catch (e) {
+    status.textContent = "Failed to fetch prices from Yahoo.";
+  } finally {
+    btn.disabled = false;
+  }
+};
