@@ -27,7 +27,15 @@ All computation happens on your machine. Your data never leaves it.
 - Python 3.11+
 - All other dependencies install automatically (see below).
 
-No external data services or API keys are needed.
+Live price auto-fetch is optional and uses Finnhub's free tier. To enable it,
+create a `.env` file in the project root with your free API key:
+
+```
+FINNHUB_API_KEY=your_key_here
+```
+
+Get a key at https://finnhub.io/register. Without it, the price-refresh button is
+disabled and manual price entry is still available. All computation stays local.
 
 ## Setup
 

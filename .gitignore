@@ -19,3 +19,5 @@ dist/
 Thumbs.db
 .superpowers/
 .codegraph/
+
+.env
