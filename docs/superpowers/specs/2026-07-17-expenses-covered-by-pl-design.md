@@ -8,7 +8,7 @@ Adicionar um novo card de resumo no topo do dashboard que exibe a percentagem da
 
 - **Despesas** = `total_card_spending` (gasto com cartão). Não inclui fees nem levantamentos.
 - **Posição** = primeiro card dentro de `#summary-cards`, empurrando "Total Invested" para a segunda posição.
-- **Cálculo base** = `total_card_spending / total_realized_pl * 100`.
+- **Cálculo base** = `total_realized_pl / total_card_spending * 100`.
 - **Capping** = limitado a `100%` quando o P/L realizado supera o gasto no cartão.
 - **Cálculo executado inteiramente no front-end** dentro de `renderSummary(s)` em `static/dashboard.js`, a partir dos campos já existentes em `summary` (`total_card_spending`, `total_realized_pl`). Não há alteração em `app.py`, `portfolio/engine.py` nem novos endpoints de API.
 
@@ -27,7 +27,7 @@ senão se spending == 0:
     display = "100%"
     cls = "positive"
 senão:
-    pct = min(100, spending / pl * 100)
+    pct = min(100, pl / spending * 100)
     display = `${pct.toFixed(1)}%`
     cls = pct >= 100 ? "positive" : "negative"
 ```
