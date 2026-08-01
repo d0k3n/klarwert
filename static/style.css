@@ -176,6 +176,30 @@ tbody tr:nth-child(even):hover { background: var(--bg-elevated); }
 #tx-filter::placeholder { color: var(--text-muted); }
 #tx-filter:focus { outline: none; border-color: var(--accent-blue); }
 
+/* Category rules */
+.rules-hint { color: var(--text-muted); font-size: 0.85rem; margin-top: -8px; }
+#uncategorized-vendors-table input, #card-rules-table input {
+  background: var(--bg-surface); color: var(--text-primary);
+  border: 1px solid var(--border-color); border-radius: 6px;
+  padding: 6px 8px; font-size: 0.85rem; box-sizing: border-box;
+}
+#uncategorized-vendors-table input:focus, #card-rules-table input:focus {
+  outline: none; border-color: var(--accent-blue);
+}
+#uncategorized-vendors-table input[type="text"], #card-rules-table input[type="text"] {
+  width: 180px;
+}
+#uncategorized-vendors-table button, #card-rules-table button {
+  background: var(--bg-surface); color: var(--text-primary);
+  border: 1px solid var(--border-color); border-radius: 6px;
+  padding: 6px 10px; font-size: 0.8rem; cursor: pointer; margin-right: 6px;
+}
+#uncategorized-vendors-table button:hover, #card-rules-table button:hover {
+  border-color: var(--accent-blue); color: var(--accent-blue);
+}
+.table-wrapper h3 { margin: 4px 0 8px; }
+.empty-rules-row td { color: var(--text-muted); font-style: italic; }
+
 /* Charts section */
 #product-charts > div { display: flex; gap: 24px; flex-wrap: wrap; }
 #product-charts > div > div { flex: 1; min-width: 300px; }

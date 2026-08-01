@@ -1,5 +1,6 @@
 import logging
 import math
+import re
 from collections import defaultdict
 from dataclasses import dataclass, field
 
@@ -399,14 +400,31 @@ MCC_CATEGORIES = {
 }
 
 
-def compute_spending(df):
+def _normalize(s):
+    return re.sub(r"[^a-z0-9]+", " ", str(s or "").lower()).strip()
+
+
+def category_for_merchant(name, mcc, rules):
+    norm_name = _normalize(name)
+    if not norm_name:
+        return "Other"
+    matches = [
+        r for r in (rules or [])
+        if _normalize(r.get("pattern", "")) and _normalize(r.get("pattern", "")) in norm_name
+    ]
+    if matches:
+        return max(matches, key=lambda r: len(_normalize(r.get("pattern", ""))))["category"]
+    return MCC_CATEGORIES.get(str(mcc or "").strip(), "Other")
+
+
+def compute_spending(df, rules=None):
     card = df[df["tx_type"] == "CARD"]
     by_category = defaultdict(float)
     by_month = defaultdict(float)
     for _, row in card.iterrows():
         amount = row["amount"] if not _isna(row["amount"]) else 0.0
         mcc = str(row.get("mcc_code", "") or "").strip()
-        category = MCC_CATEGORIES.get(mcc, "Other")
+        category = category_for_merchant(row["name"], mcc, rules)
         by_category[category] += -amount
         by_month[row["datetime"].strftime("%Y-%m")] += -amount
     categories = [
@@ -558,18 +576,38 @@ def auto_detect_knocked(df):
     return auto_ids
 
 
-def compute_card_transactions(df):
+def compute_card_transactions(df, rules=None):
     card = df[df["tx_type"] == "CARD"].sort_values("datetime", ascending=False).copy()
     result = []
     for _, row in card.iterrows():
+        mcc = str(row.get("mcc_code", "") or "").strip()
         result.append({
             "id": row.get("transaction_id", ""),
             "datetime": row["datetime"].isoformat(),
             "name": row["name"],
             "amount": round(abs(row["amount"]), 2) if not _isna(row["amount"]) else None,
             "description": row.get("description", ""),
+            "category": category_for_merchant(row["name"], mcc, rules),
         })
     return result
+
+
+def uncategorized_vendors(df, rules=None):
+    card = df[df["tx_type"] == "CARD"]
+    groups = {}
+    for _, row in card.iterrows():
+        name = str(row.get("name", "") or "").strip()
+        if not name:
+            continue
+        mcc = str(row.get("mcc_code", "") or "").strip()
+        if category_for_merchant(name, mcc, rules) != "Other":
+            continue
+        amount = row["amount"] if not _isna(row["amount"]) else 0.0
+        g = groups.setdefault(name, {"name": name, "count": 0, "total": 0.0})
+        g["count"] += 1
+        g["total"] += -amount
+    out = [{"name": g["name"], "count": g["count"], "total": round(g["total"], 2)} for g in groups.values()]
+    return sorted(out, key=lambda v: (-v["total"], v["name"]))
 
 
 def _isna(val):

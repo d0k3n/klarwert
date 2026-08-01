@@ -2,6 +2,7 @@ transactions.csv
 knocked_down.json
 prices.json
 tickers.json
+card_rules.json
 
 # Python
 __pycache__/

@@ -8,7 +8,10 @@ from pathlib import Path
 from flask import Flask, jsonify, request, send_from_directory
 
 from portfolio.parser import parse_csv
-from portfolio.engine import run_engine, compute_derivative_executions, compute_card_transactions, auto_detect_knocked, apply_prices, compute_income, compute_spending
+from portfolio.engine import (
+    run_engine, compute_derivative_executions, compute_card_transactions, auto_detect_knocked,
+    apply_prices, compute_income, compute_spending, uncategorized_vendors, _normalize,
+)
 from portfolio.tax_report import build_tax_report
 from portfolio.performance import compute_performance
 from portfolio.market import refresh_prices
@@ -33,6 +36,7 @@ CSV_PATH = BASE_DIR / "transactions.csv"
 KD_PATH = BASE_DIR / "knocked_down.json"
 PRICES_PATH = BASE_DIR / "prices.json"
 TICKERS_PATH = BASE_DIR / "tickers.json"
+RULES_PATH = BASE_DIR / "card_rules.json"
 
 
 def load_prices():
@@ -60,6 +64,17 @@ def load_tickers():
 
 def save_tickers(tickers):
     TICKERS_PATH.write_text(json.dumps(tickers, indent=2), encoding="utf-8")
+
+
+def load_card_rules():
+    if RULES_PATH.exists():
+        data = json.loads(RULES_PATH.read_text(encoding="utf-8"))
+        return data.get("rules", [])
+    return []
+
+
+def save_card_rules(rules):
+    RULES_PATH.write_text(json.dumps({"rules": rules}, indent=2), encoding="utf-8")
 
 df = None
 if CSV_PATH.exists():
@@ -307,7 +322,7 @@ def api_tax_report():
 def api_card_transactions():
     if df is None:
         return jsonify([])
-    return jsonify(compute_card_transactions(df))
+    return jsonify(compute_card_transactions(df, load_card_rules()))
 
 
 @app.route("/api/derivative_executions")
@@ -331,7 +346,40 @@ def api_income():
 def api_spending():
     if df is None:
         return jsonify({"by_category": [], "monthly": []})
-    return jsonify(compute_spending(df))
+    return jsonify(compute_spending(df, load_card_rules()))
+
+
+@app.route("/api/card_rules")
+def api_card_rules():
+    rules = load_card_rules()
+    vendors = uncategorized_vendors(df, rules) if df is not None else []
+    return jsonify({"rules": rules, "uncategorized_vendors": vendors})
+
+
+@app.route("/api/card_rules", methods=["POST"])
+def api_card_rules_upsert():
+    body = request.get_json() or {}
+    pattern = str(body.get("pattern", "") or "").strip()
+    category = str(body.get("category", "") or "").strip()
+    if not pattern or not category:
+        return jsonify({"ok": False, "error": "pattern and category are required"}), 400
+    norm = _normalize(pattern)
+    rules = [r for r in load_card_rules() if _normalize(r.get("pattern", "")) != norm]
+    rules.append({"pattern": pattern, "category": category})
+    save_card_rules(rules)
+    return jsonify({"ok": True, "rules": rules})
+
+
+@app.route("/api/card_rules", methods=["DELETE"])
+def api_card_rules_delete():
+    body = request.get_json() or {}
+    pattern = str(body.get("pattern", "") or "").strip()
+    if not pattern:
+        return jsonify({"ok": False, "error": "pattern is required"}), 400
+    norm = _normalize(pattern)
+    rules = [r for r in load_card_rules() if _normalize(r.get("pattern", "")) != norm]
+    save_card_rules(rules)
+    return jsonify({"ok": True, "rules": rules})
 
 
 if __name__ == "__main__":

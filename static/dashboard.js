@@ -62,7 +62,7 @@ const TABLE_CONFIGS = {
 };
 
 async function loadAllData() {
-const [summary, valuedPositions, closedPositions, cashFlow, transactions, products, monthlyPl, derivativeExecutions, cardTransactions, lotMatches, perfData, income, spending] = await Promise.all([
+const [summary, valuedPositions, closedPositions, cashFlow, transactions, products, monthlyPl, derivativeExecutions, cardTransactions, lotMatches, perfData, income, spending, cardRules] = await Promise.all([
 loadJSON(`${BASE}/api/summary`),
 loadJSON(`${BASE}/api/valued_positions`),
 loadJSON(`${BASE}/api/closed_positions`),
@@ -76,6 +76,7 @@ loadJSON(`${BASE}/api/lot_matches`),
 loadJSON(`${BASE}/api/performance`),
 loadJSON(`${BASE}/api/income`),
 loadJSON(`${BASE}/api/spending`),
+loadJSON(`${BASE}/api/card_rules`),
 ]);
 
 const empty = !summary || Object.keys(summary).length === 0;
@@ -104,6 +105,7 @@ renderTable("derivative-executions-table", derivativeExecutions, TABLE_CONFIGS['
 renderTable("lot-matches-table", lotMatches, TABLE_CONFIGS['lot-matches-table']);
 renderTable("card-expenses-table", cardTransactions, TABLE_CONFIGS['card-expenses-table']);
 renderSpendingCharts(spending);
+renderCardRules(cardRules);
 }
 
 window.uploadCSV = async function (input) {
@@ -801,6 +803,110 @@ function renderSpendingCharts(spending) {
         y: { beginAtZero: true, ticks: { color: "#8b949e" }, grid: { color: "#21262d" } },
       },
     },
+  });
+}
+
+async function saveRule(pattern, category) {
+  await fetch(`${BASE}/api/card_rules`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ pattern, category }),
+  });
+}
+
+async function deleteRule(pattern) {
+  await fetch(`${BASE}/api/card_rules`, {
+    method: "DELETE",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ pattern }),
+  });
+}
+
+function renderCardRules(data) {
+  const uncatBody = document.querySelector("#uncategorized-vendors-table tbody");
+  uncatBody.innerHTML = "";
+  const vendors = data.uncategorized_vendors || [];
+  if (vendors.length === 0) {
+    const tr = document.createElement("tr");
+    tr.className = "empty-rules-row";
+    tr.innerHTML = '<td colspan="5">No uncategorized merchants \u2014 all spending is categorized.</td>';
+    uncatBody.appendChild(tr);
+  }
+  vendors.forEach(v => {
+    const tr = document.createElement("tr");
+    const patternInput = document.createElement("input");
+    patternInput.type = "text";
+    patternInput.value = v.name;
+    patternInput.title = "Substring matched against merchant names";
+    const categoryInput = document.createElement("input");
+    categoryInput.type = "text";
+    categoryInput.placeholder = "category";
+    const save = document.createElement("button");
+    save.textContent = "Save";
+    save.addEventListener("click", async () => {
+      await saveRule(patternInput.value, categoryInput.value);
+      await loadAllData();
+    });
+    const tdPattern = document.createElement("td");
+    tdPattern.appendChild(patternInput);
+    const tdTxns = document.createElement("td");
+    tdTxns.className = "num";
+    tdTxns.textContent = v.count;
+    const tdTotal = document.createElement("td");
+    tdTotal.className = "num";
+    tdTotal.textContent = v.total != null ? v.total.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 }) : "";
+    const tdCat = document.createElement("td");
+    tdCat.appendChild(categoryInput);
+    const tdBtn = document.createElement("td");
+    tdBtn.appendChild(save);
+    tr.appendChild(tdPattern);
+    tr.appendChild(tdTxns);
+    tr.appendChild(tdTotal);
+    tr.appendChild(tdCat);
+    tr.appendChild(tdBtn);
+    uncatBody.appendChild(tr);
+  });
+
+  const rulesBody = document.querySelector("#card-rules-table tbody");
+  rulesBody.innerHTML = "";
+  const rules = data.rules || [];
+  if (rules.length === 0) {
+    const tr = document.createElement("tr");
+    tr.className = "empty-rules-row";
+    tr.innerHTML = '<td colspan="3">No rules yet \u2014 add one from the uncategorized vendors above.</td>';
+    rulesBody.appendChild(tr);
+  }
+  rules.forEach(r => {
+    const tr = document.createElement("tr");
+    const patternInput = document.createElement("input");
+    patternInput.type = "text";
+    patternInput.value = r.pattern;
+    const categoryInput = document.createElement("input");
+    categoryInput.type = "text";
+    categoryInput.value = r.category;
+    const save = document.createElement("button");
+    save.textContent = "Save";
+    save.addEventListener("click", async () => {
+      await saveRule(patternInput.value, categoryInput.value);
+      await loadAllData();
+    });
+    const del = document.createElement("button");
+    del.textContent = "Delete";
+    del.addEventListener("click", async () => {
+      await deleteRule(patternInput.value);
+      await loadAllData();
+    });
+    const tdPattern = document.createElement("td");
+    tdPattern.appendChild(patternInput);
+    const tdCat = document.createElement("td");
+    tdCat.appendChild(categoryInput);
+    const tdBtns = document.createElement("td");
+    tdBtns.appendChild(save);
+    tdBtns.appendChild(del);
+    tr.appendChild(tdPattern);
+    tr.appendChild(tdCat);
+    tr.appendChild(tdBtns);
+    rulesBody.appendChild(tr);
   });
 }
 

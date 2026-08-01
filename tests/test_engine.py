@@ -1,5 +1,9 @@
 import pandas as pd
-from portfolio.engine import run_engine, auto_detect_knocked, compute_derivative_executions, apply_prices, compute_income, compute_spending
+from portfolio.engine import (
+    run_engine, auto_detect_knocked, compute_derivative_executions, apply_prices,
+    compute_income, compute_spending, compute_card_transactions, category_for_merchant,
+    uncategorized_vendors,
+)
 
 
 def _make_df(rows):
@@ -789,3 +793,62 @@ def test_compute_spending_categories_and_refunds():
     assert by_cat["Other"] == 5.0
     jun = [m for m in spending["monthly"] if m["month"] == "2025-06"][0]
     assert jun["total"] == 75.0
+
+
+def test_category_for_merchant_rule_overrides_mcc():
+    rules = [{"pattern": "ISLA", "category": "Education"}]
+    assert category_for_merchant("ISLA MADRID", "5812", rules) == "Education"
+
+
+def test_category_for_merchant_normalized_contains_longest_wins():
+    rules = [
+        {"pattern": "isla", "category": "Education"},
+        {"pattern": "ISLA CAFE", "category": "Coffee"},
+    ]
+    assert category_for_merchant("ISLA-CAFE", "", rules) == "Coffee"
+    assert category_for_merchant("isla madrid", "", rules) == "Education"
+
+
+def test_category_for_merchant_falls_back_to_mcc():
+    assert category_for_merchant("INTERMARCHE", "5411", []) == "Groceries"
+    assert category_for_merchant("UNKNOWN SHOP", "", []) == "Other"
+
+
+def test_compute_spending_applies_user_rules():
+    df = _make_df([
+        {"datetime": pd.Timestamp("2025-06-01", tz="UTC"), "tx_type": "CARD", "name": "ISLA", "symbol": "",
+         "asset_class": "", "shares": 0.0, "price": 0.0, "amount": -500.0, "fee": 0.0, "tax": 0.0, "mcc_code": ""},
+        {"datetime": pd.Timestamp("2025-06-02", tz="UTC"), "tx_type": "CARD", "name": "INTERMARCHE", "symbol": "",
+         "asset_class": "", "shares": 0.0, "price": 0.0, "amount": -50.0, "fee": 0.0, "tax": 0.0, "mcc_code": "5411"},
+    ])
+    rules = [{"pattern": "isla", "category": "Education"}]
+    spending = compute_spending(df, rules)
+    by_cat = {c["category"]: c["total"] for c in spending["by_category"]}
+    assert by_cat["Education"] == 500.0
+    assert by_cat["Groceries"] == 50.0
+    assert "Other" not in by_cat
+
+
+def test_compute_card_transactions_includes_rule_category():
+    df = _make_df([
+        {"datetime": pd.Timestamp("2025-06-01", tz="UTC"), "tx_type": "CARD", "name": "ISLA", "symbol": "",
+         "asset_class": "", "shares": 0.0, "price": 0.0, "amount": -500.0, "fee": 0.0, "tax": 0.0, "mcc_code": "",
+         "description": "", "transaction_id": "c1"},
+    ])
+    rules = [{"pattern": "isla", "category": "Education"}]
+    rows = compute_card_transactions(df, rules)
+    assert rows[0]["category"] == "Education"
+
+
+def test_uncategorized_vendors_lists_only_other_and_respects_rules():
+    df = _make_df([
+        {"datetime": pd.Timestamp("2025-06-01", tz="UTC"), "tx_type": "CARD", "name": "ISLA MADRID", "symbol": "",
+         "asset_class": "", "shares": 0.0, "price": 0.0, "amount": -10.0, "fee": 0.0, "tax": 0.0, "mcc_code": ""},
+        {"datetime": pd.Timestamp("2025-06-02", tz="UTC"), "tx_type": "CARD", "name": "ISLA MADRID", "symbol": "",
+         "asset_class": "", "shares": 0.0, "price": 0.0, "amount": -5.0, "fee": 0.0, "tax": 0.0, "mcc_code": ""},
+        {"datetime": pd.Timestamp("2025-06-03", tz="UTC"), "tx_type": "CARD", "name": "INTERMARCHE", "symbol": "",
+         "asset_class": "", "shares": 0.0, "price": 0.0, "amount": -50.0, "fee": 0.0, "tax": 0.0, "mcc_code": "5411"},
+    ])
+    vendors = uncategorized_vendors(df)
+    assert vendors == [{"name": "ISLA MADRID", "count": 2, "total": 15.0}]
+    assert uncategorized_vendors(df, [{"pattern": "isla", "category": "Education"}]) == []
