@@ -1013,6 +1013,7 @@ window.refreshPrices = async function () {
   const status = document.getElementById("price-status");
   btn.disabled = true;
   status.textContent = "Fetching...";
+  let keepDisabled = false;
   try {
     const r = await fetch(`${BASE}/api/refresh_prices`, { method: "POST" });
     if (!r.ok) {
@@ -1022,6 +1023,7 @@ window.refreshPrices = async function () {
     }
     const data = await r.json();
     if (data.enabled === false) {
+      keepDisabled = true;
       status.textContent = "Live prices disabled: no Finnhub API key configured.";
       return;
     }
@@ -1047,6 +1049,8 @@ window.refreshPrices = async function () {
   } catch (e) {
     status.textContent = "Failed to fetch prices.";
   } finally {
-    btn.disabled = false;
+    if (!keepDisabled) {
+      btn.disabled = false;
+    }
   }
 };
