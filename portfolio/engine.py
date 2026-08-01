@@ -12,6 +12,7 @@ class Lot:
     shares: float
     price: float
     total_cost: float
+    datetime: object = None
 
 
 def _empty_product(isin, name, asset_class):
@@ -46,6 +47,7 @@ def run_engine(df):
         by_isin[row["symbol"]].append(row)
 
     monthly_pl = defaultdict(float)
+    lot_matches = []
     per_product = {}
 
     open_positions = []
@@ -97,6 +99,19 @@ def run_engine(df):
                 if shares_taken > 0.001:
                     cp["closed_lots"] += 1
                     cp["total_shares_sold"] += shares_taken
+                for l in open_lots:
+                    share_ratio = l.shares / shares_taken if shares_taken > 0 else 0.0
+                    proceeds_lot = amount * share_ratio
+                    lot_matches.append({
+                        "isin": isin, "name": name,
+                        "sell_id": str(row.get("transaction_id", "") or ""),
+                        "sell_datetime": row["datetime"].isoformat(),
+                        "lot_datetime": l.datetime.isoformat() if l.datetime else "",
+                        "shares": round(l.shares, 6),
+                        "proceeds": round(proceeds_lot, 2),
+                        "cost_basis": round(l.total_cost, 2),
+                        "pl": round(proceeds_lot - l.total_cost, 2),
+                    })
                 open_lots.clear()
                 continue
             shares = row["shares"]
@@ -111,7 +126,8 @@ def run_engine(df):
                 total_trades += 1
 
                 if row.get("knocked") is True:
-                    lot = Lot(id=next(lot_id_gen), shares=shares, price=price, total_cost=total_cost)
+                    lot = Lot(id=next(lot_id_gen), shares=shares, price=price, total_cost=total_cost,
+                              datetime=row["datetime"])
                     realized_pl = -lot.total_cost
                     ko_dt = we_dates.get(isin, row["datetime"])
                     month = ko_dt.strftime("%Y-%m")
@@ -122,6 +138,15 @@ def run_engine(df):
                     cp["total_realized_pl"] += realized_pl
                     cp["closed_lots"] += 1
                     cp["total_shares_sold"] += shares
+                    lot_matches.append({
+                        "isin": isin, "name": name, "sell_id": "",
+                        "sell_datetime": ko_dt.isoformat(),
+                        "lot_datetime": row["datetime"].isoformat(),
+                        "shares": round(shares, 6),
+                        "proceeds": 0.0,
+                        "cost_basis": round(lot.total_cost, 2),
+                        "pl": round(-lot.total_cost, 2),
+                    })
                 else:
                     to_allocate = shares
                     while to_allocate > 0.001 and open_lots and open_lots[0].shares < 0:
@@ -137,6 +162,16 @@ def run_engine(df):
                         cp["total_realized_pl"] += cover_pl
                         cp["closed_lots"] += 1
                         cp["total_shares_sold"] += covered
+                        lot_matches.append({
+                            "isin": isin, "name": name,
+                            "sell_id": str(row.get("transaction_id", "") or ""),
+                            "sell_datetime": row["datetime"].isoformat(),
+                            "lot_datetime": neg.datetime.isoformat() if neg.datetime else "",
+                            "shares": round(covered, 6),
+                            "proceeds": round(proceeds_portion, 2),
+                            "cost_basis": round(covered * price, 2),
+                            "pl": round(cover_pl, 2),
+                        })
                         neg.shares += covered
                         neg.total_cost += proceeds_portion
                         to_allocate -= covered
@@ -148,7 +183,8 @@ def run_engine(df):
                         ratio = to_allocate / shares
                         lot_cost = to_allocate * price + (fee + tax) * ratio
                         open_lots.append(Lot(id=next(lot_id_gen), shares=to_allocate,
-                                             price=price, total_cost=lot_cost))
+                                             price=price, total_cost=lot_cost,
+                                             datetime=row["datetime"]))
 
             elif row["tx_type"] == "SELL":
                 total_fees += fee
@@ -161,9 +197,20 @@ def run_engine(df):
                     lot = open_lots[0]
                     used = min(remaining, lot.shares)
                     ratio = used / lot.shares
+                    lot_cost_portion = lot.total_cost * ratio
                     sell_proceeds += used * price
-                    cost_basis_total += lot.total_cost * ratio
-                    lot.total_cost -= lot.total_cost * ratio
+                    cost_basis_total += lot_cost_portion
+                    lot_matches.append({
+                        "isin": isin, "name": name,
+                        "sell_id": str(row.get("transaction_id", "") or ""),
+                        "sell_datetime": row["datetime"].isoformat(),
+                        "lot_datetime": lot.datetime.isoformat() if lot.datetime else "",
+                        "shares": round(used, 6),
+                        "proceeds": round(used * price, 2),
+                        "cost_basis": round(lot_cost_portion, 2),
+                        "pl": round(used * price - lot_cost_portion, 2),
+                    })
+                    lot.total_cost -= lot_cost_portion
                     lot.shares -= used
                     remaining -= used
                     if lot.shares < 0.001:
@@ -181,7 +228,8 @@ def run_engine(df):
                             isin, remaining,
                         )
                         open_lots.append(Lot(id=next(lot_id_gen), shares=-remaining,
-                                             price=price, total_cost=-(remaining * price)))
+                                             price=price, total_cost=-(remaining * price),
+                                             datetime=row["datetime"]))
                     else:
                         logger.info(
                             "SELL %s: %.4f unmatched shares at zero price (expiration), ignored",
@@ -316,6 +364,7 @@ def run_engine(df):
         "transactions": transactions,
         "products": list(per_product.values()),
         "monthly_pl": [{"month": m, "realized_pl": round(v, 2)} for m, v in sorted(monthly_pl.items())],
+        "lot_matches": lot_matches,
     }
 
 

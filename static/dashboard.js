@@ -45,15 +45,20 @@ const TABLE_CONFIGS = {
     groupLabels: { name: 'Merchant' },
     numericFields: ['amount'],
   },
-  'transactions-table': {
+   'transactions-table': {
     groupColumns: ['type', 'asset_class'],
     groupLabels: { type: 'Type', asset_class: 'Asset Class' },
     numericFields: ['shares', 'amount'],
   },
+  'lot-matches-table': {
+    groupColumns: ['name', 'isin'],
+    groupLabels: { name: 'Name', isin: 'ISIN' },
+    numericFields: ['shares', 'proceeds', 'cost_basis', 'pl'],
+  },
 };
 
 async function loadAllData() {
-const [summary, openPositions, closedPositions, cashFlow, transactions, products, monthlyPl, derivativeExecutions, cardTransactions] = await Promise.all([
+const [summary, openPositions, closedPositions, cashFlow, transactions, products, monthlyPl, derivativeExecutions, cardTransactions, lotMatches] = await Promise.all([
 loadJSON(`${BASE}/api/summary`),
 loadJSON(`${BASE}/api/open_positions`),
 loadJSON(`${BASE}/api/closed_positions`),
@@ -63,6 +68,7 @@ loadJSON(`${BASE}/api/products`),
 loadJSON(`${BASE}/api/monthly_pl`),
 loadJSON(`${BASE}/api/derivative_executions`),
 loadJSON(`${BASE}/api/card_transactions`),
+loadJSON(`${BASE}/api/lot_matches`),
 ]);
 
 const empty = !summary || Object.keys(summary).length === 0;
@@ -82,6 +88,7 @@ renderTable("product-results-table", products, TABLE_CONFIGS['product-results-ta
 renderAllocationChart(openPositions);
 renderDividendChart(products);
 renderTable("derivative-executions-table", derivativeExecutions, TABLE_CONFIGS['derivative-executions-table']);
+renderTable("lot-matches-table", lotMatches, TABLE_CONFIGS['lot-matches-table']);
 renderTable("card-expenses-table", cardTransactions, TABLE_CONFIGS['card-expenses-table']);
 }
 
@@ -251,7 +258,7 @@ function insertGroupDropdown(table, config, onChange) {
 
 function formatVal(key, val) {
   if (typeof val !== 'number') return val ?? '';
-  if (key === 'average_cost' || key.endsWith('_cost') || key === 'total_realized_pl' || key === 'total_invested' || key === 'total_dividends' || key === 'total_dividend_tax' || key === 'total_dividends_net' || key === 'total_fees' || key === 'amount' || key === 'price' || key === 'ko_total' || key === 'warrant_return' || key === 'net_result') {
+  if (key === 'average_cost' || key.endsWith('_cost') || key === 'total_realized_pl' || key === 'total_invested' || key === 'total_dividends' || key === 'total_dividend_tax' || key === 'total_dividends_net' || key === 'total_fees' || key === 'amount' || key === 'price' || key === 'ko_total' || key === 'warrant_return' || key === 'net_result' || key === 'proceeds' || key === 'cost_basis' || key === 'pl') {
     return `\u20AC${val.toLocaleString(undefined, {minimumFractionDigits: 2, maximumFractionDigits: 2})}`;
   }
   if (key === 'shares' || key === 'total_shares_sold') {
@@ -444,7 +451,7 @@ if (typeof val === "number") {
 td.textContent = formatVal(key, val);
 } else if (key === 'reconciled') {
 td.textContent = val ? '\u2713' : '\u2717';
-} else if (key === 'datetime' && val) {
+} else if (key.endsWith('datetime') && val) {
 td.textContent = new Date(val).toLocaleDateString();
 } else {
 td.textContent = val || "";

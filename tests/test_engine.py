@@ -616,3 +616,58 @@ def test_reconciliation_captures_standalone_fee_column():
     assert rec["cash_balance"] == 2093.0
     assert rec["fees"] == 5.0
     assert abs(rec["difference"]) <= 0.01
+
+
+def test_lot_matches_recorded_per_lot():
+    df = _make_df([
+        {"datetime": pd.Timestamp("2025-06-01", tz="UTC"), "tx_type": "BUY", "name": "S&P", "symbol": "SP",
+         "asset_class": "FUND", "shares": 10.0, "price": 100.0, "amount": -1000.0, "fee": 0.0, "tax": 0.0,
+         "transaction_id": "b1"},
+        {"datetime": pd.Timestamp("2025-06-15", tz="UTC"), "tx_type": "BUY", "name": "S&P", "symbol": "SP",
+         "asset_class": "FUND", "shares": 10.0, "price": 120.0, "amount": -1200.0, "fee": 0.0, "tax": 0.0,
+         "transaction_id": "b2"},
+        {"datetime": pd.Timestamp("2025-07-01", tz="UTC"), "tx_type": "SELL", "name": "S&P", "symbol": "SP",
+         "asset_class": "FUND", "shares": 15.0, "price": 130.0, "amount": 1950.0, "fee": 0.0, "tax": 0.0,
+         "transaction_id": "s1"},
+    ])
+    result = run_engine(df)
+    matches = result["lot_matches"]
+    assert len(matches) == 2
+    assert matches[0]["sell_id"] == "s1"
+    assert matches[0]["shares"] == 10.0
+    assert matches[0]["cost_basis"] == 1000.0
+    assert matches[0]["proceeds"] == 1300.0
+    assert matches[0]["pl"] == 300.0
+    assert matches[0]["lot_datetime"].startswith("2025-06-01")
+    assert matches[1]["shares"] == 5.0
+    assert matches[1]["cost_basis"] == 600.0
+    assert matches[1]["lot_datetime"].startswith("2025-06-15")
+
+
+def test_lot_matches_for_knocked_and_tilg():
+    df = _make_df([
+        {"datetime": pd.Timestamp("2025-06-01", tz="UTC"), "tx_type": "BUY", "name": "W", "symbol": "DE200",
+         "asset_class": "DERIVATIVE", "shares": 100.0, "price": 5.0, "amount": -500.0, "fee": 0.0, "tax": 0.0,
+         "transaction_id": "b1", "knocked": True},
+        {"datetime": pd.Timestamp("2025-06-20", tz="UTC"), "tx_type": "TILG", "name": "W", "symbol": "DE200",
+         "asset_class": "DERIVATIVE", "shares": 0.0, "price": 0.0, "amount": 50.0, "fee": 0.0, "tax": 0.0,
+         "transaction_id": "t1"},
+        {"datetime": pd.Timestamp("2025-06-01", tz="UTC"), "tx_type": "BUY", "name": "Y", "symbol": "DE201",
+         "asset_class": "DERIVATIVE", "shares": 10.0, "price": 10.0, "amount": -100.0, "fee": 0.0, "tax": 0.0,
+         "transaction_id": "b2"},
+        {"datetime": pd.Timestamp("2025-07-01", tz="UTC"), "tx_type": "TILG", "name": "Y", "symbol": "DE201",
+         "asset_class": "DERIVATIVE", "shares": 0.0, "price": 0.0, "amount": 30.0, "fee": 0.0, "tax": 0.0,
+         "transaction_id": "t2"},
+    ])
+    result = run_engine(df)
+    matches = result["lot_matches"]
+    ko = [m for m in matches if m["isin"] == "DE200"]
+    assert len(ko) == 1
+    assert ko[0]["proceeds"] == 0.0
+    assert ko[0]["pl"] == -500.0
+    tilg = [m for m in matches if m["isin"] == "DE201"]
+    assert len(tilg) == 1
+    assert tilg[0]["proceeds"] == 30.0
+    assert tilg[0]["cost_basis"] == 100.0
+    assert tilg[0]["pl"] == -70.0
+    assert tilg[0]["sell_id"] == "t2"
