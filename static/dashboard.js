@@ -58,7 +58,7 @@ const TABLE_CONFIGS = {
 };
 
 async function loadAllData() {
-const [summary, openPositions, closedPositions, cashFlow, transactions, products, monthlyPl, derivativeExecutions, cardTransactions, lotMatches] = await Promise.all([
+const [summary, openPositions, closedPositions, cashFlow, transactions, products, monthlyPl, derivativeExecutions, cardTransactions, lotMatches, perfData] = await Promise.all([
 loadJSON(`${BASE}/api/summary`),
 loadJSON(`${BASE}/api/open_positions`),
 loadJSON(`${BASE}/api/closed_positions`),
@@ -69,6 +69,7 @@ loadJSON(`${BASE}/api/monthly_pl`),
 loadJSON(`${BASE}/api/derivative_executions`),
 loadJSON(`${BASE}/api/card_transactions`),
 loadJSON(`${BASE}/api/lot_matches`),
+loadJSON(`${BASE}/api/performance`),
 ]);
 
 const empty = !summary || Object.keys(summary).length === 0;
@@ -77,6 +78,7 @@ document.getElementById("summary-cards").innerHTML = "";
 document.getElementById("summary-by-asset-class").innerHTML = "";
 if (empty) return;
 renderSummary(summary);
+renderPerformance(perfData);
 renderSummaryByAssetClass(summary);
 renderRecon(summary);
 renderTable("open-positions-table", openPositions, TABLE_CONFIGS['open-positions-table']);
@@ -305,6 +307,24 @@ container.appendChild(div);
 
 const realizedCard = container.querySelector(".card:nth-child(3) .value");
 if (realizedCard) realizedCard.textContent = `\u20AC${pl.toLocaleString()}`;
+}
+
+function renderPerformance(p) {
+if (!p || Object.keys(p).length === 0) return;
+const container = document.getElementById("summary-cards");
+const eur = v => v == null ? "N/A" : `\u20AC${v.toLocaleString(undefined, {minimumFractionDigits: 2, maximumFractionDigits: 2})}`;
+const cards = [
+  { label: "XIRR (annualized)", value: p.xirr == null ? "N/A" : `${(p.xirr * 100).toFixed(2)}%` },
+  { label: "Win Rate (closed)", value: p.win_rate == null ? "N/A" : `${p.win_rate}% (${p.winners}W/${p.losers}L)` },
+  { label: "Avg Win", value: eur(p.avg_win), cls: "positive" },
+  { label: "Avg Loss", value: eur(p.avg_loss), cls: "negative" },
+];
+cards.forEach(c => {
+  const div = document.createElement("div");
+  div.className = "card";
+  div.innerHTML = `<div class="label">${c.label}</div><div class="value ${c.cls || ""}">${c.value}</div>`;
+  container.appendChild(div);
+});
 }
 
 function renderSummaryByAssetClass(s) {

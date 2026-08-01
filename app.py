@@ -10,6 +10,7 @@ from flask import Flask, jsonify, request, send_from_directory
 from portfolio.parser import parse_csv
 from portfolio.engine import run_engine, compute_derivative_executions, compute_card_transactions, auto_detect_knocked
 from portfolio.tax_report import build_tax_report
+from portfolio.performance import compute_performance
 import licensing as license_module
 
 logging.basicConfig(level=logging.INFO, format="%(levelname)s: %(message)s")
@@ -171,6 +172,13 @@ def api_open_positions():
 @app.route("/api/closed_positions")
 def api_closed_positions():
     return jsonify(compute_data(load_knocked_ids())["closed_positions"])
+
+
+@app.route("/api/performance")
+def api_performance():
+    if df is None:
+        return jsonify({})
+    return jsonify(compute_performance(df, compute_data(load_knocked_ids())))
 
 
 @app.route("/api/cash_flow")
