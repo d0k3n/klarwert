@@ -22,8 +22,8 @@ const TABLE_CONFIGS = {
   'open-positions-table': {
     groupColumns: ['asset_class'],
     groupLabels: { asset_class: 'Asset Class' },
-    numericFields: ['shares', 'total_cost'],
-    averageFields: ['average_cost'],
+    numericFields: ['shares', 'total_cost', 'market_value', 'unrealized_pl'],
+    averageFields: ['average_cost', 'market_price'],
   },
   'closed-positions-table': {
     groupColumns: ['asset_class'],
@@ -58,9 +58,9 @@ const TABLE_CONFIGS = {
 };
 
 async function loadAllData() {
-const [summary, openPositions, closedPositions, cashFlow, transactions, products, monthlyPl, derivativeExecutions, cardTransactions, lotMatches, perfData] = await Promise.all([
+const [summary, valuedPositions, closedPositions, cashFlow, transactions, products, monthlyPl, derivativeExecutions, cardTransactions, lotMatches, perfData] = await Promise.all([
 loadJSON(`${BASE}/api/summary`),
-loadJSON(`${BASE}/api/open_positions`),
+loadJSON(`${BASE}/api/valued_positions`),
 loadJSON(`${BASE}/api/closed_positions`),
 loadJSON(`${BASE}/api/cash_flow`),
 loadJSON(`${BASE}/api/transactions`),
@@ -81,7 +81,10 @@ renderSummary(summary);
 renderPerformance(perfData);
 renderSummaryByAssetClass(summary);
 renderRecon(summary);
+const openPositions = valuedPositions.positions || [];
 renderTable("open-positions-table", openPositions, TABLE_CONFIGS['open-positions-table']);
+renderPriceInputs(openPositions);
+renderValuedCards(valuedPositions.totals || {});
 renderTable("closed-positions-table", closedPositions, TABLE_CONFIGS['closed-positions-table']);
 renderCashFlowChart(cashFlow);
 renderTransactions(transactions);
@@ -260,7 +263,7 @@ function insertGroupDropdown(table, config, onChange) {
 
 function formatVal(key, val) {
   if (typeof val !== 'number') return val ?? '';
-  if (key === 'average_cost' || key.endsWith('_cost') || key === 'total_realized_pl' || key === 'total_invested' || key === 'total_dividends' || key === 'total_dividend_tax' || key === 'total_dividends_net' || key === 'total_fees' || key === 'amount' || key === 'price' || key === 'ko_total' || key === 'warrant_return' || key === 'net_result' || key === 'proceeds' || key === 'cost_basis' || key === 'pl') {
+  if (key === 'average_cost' || key.endsWith('_cost') || key === 'total_realized_pl' || key === 'total_invested' || key === 'total_dividends' || key === 'total_dividend_tax' || key === 'total_dividends_net' || key === 'total_fees' || key === 'amount' || key === 'price' || key === 'ko_total' || key === 'warrant_return' || key === 'net_result' || key === 'proceeds' || key === 'cost_basis' || key === 'pl' || key === 'market_value' || key === 'unrealized_pl' || key === 'market_price') {
     return `\u20AC${val.toLocaleString(undefined, {minimumFractionDigits: 2, maximumFractionDigits: 2})}`;
   }
   if (key === 'shares' || key === 'total_shares_sold') {
@@ -749,3 +752,44 @@ a.href = URL.createObjectURL(blob);
 a.download = `tax_report_${lastTaxReport.year}.csv`;
 a.click();
 };
+
+function renderValuedCards(totals) {
+const container = document.getElementById("summary-cards");
+const eur = v => `\u20AC${(v || 0).toLocaleString(undefined, {minimumFractionDigits: 2, maximumFractionDigits: 2})}`;
+[
+  { label: "Est. Market Value", value: eur(totals.market_value) },
+  { label: "Unrealized P&L", value: eur(totals.unrealized_pl), cls: (totals.unrealized_pl || 0) >= 0 ? "positive" : "negative" },
+].forEach(c => {
+  const div = document.createElement("div");
+  div.className = "card";
+  div.innerHTML = `<div class="label">${c.label}</div><div class="value ${c.cls || ""}">${c.value}</div>`;
+  container.appendChild(div);
+});
+}
+
+function renderPriceInputs(positions) {
+const container = document.getElementById("price-inputs");
+container.innerHTML = "";
+positions.forEach(p => {
+  const row = document.createElement("div");
+  row.style.marginBottom = "6px";
+  row.innerHTML = `<span style="display:inline-block; width:320px;">${p.name} (${p.isin})</span>`;
+  const input = document.createElement("input");
+  input.type = "number";
+  input.step = "0.0001";
+  input.min = "0";
+  input.placeholder = "price";
+  if (p.market_price != null) input.value = p.market_price;
+  input.addEventListener("change", async () => {
+    const price = input.value === "" ? null : parseFloat(input.value);
+    await fetch(`${BASE}/api/prices`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ isin: p.isin, price }),
+    });
+    await loadAllData();
+  });
+  row.appendChild(input);
+  container.appendChild(row);
+});
+}

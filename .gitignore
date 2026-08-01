@@ -1,5 +1,6 @@
 transactions.csv
 knocked_down.json
+prices.json
 
 # Python
 __pycache__/

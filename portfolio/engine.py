@@ -545,3 +545,30 @@ def _get_recent_transactions(trades, limit=50):
             "asset_class": row["asset_class"],
         })
     return result
+
+
+def apply_prices(open_positions, prices):
+    positions = []
+    total_value = 0.0
+    total_unrealized = 0.0
+    for p in open_positions:
+        price = prices.get(p["isin"])
+        row = dict(p)
+        if price is not None:
+            row["market_price"] = price
+            row["market_value"] = round(p["shares"] * price, 2)
+            row["unrealized_pl"] = round(p["shares"] * price - p["total_cost"], 2)
+            total_value += row["market_value"]
+            total_unrealized += row["unrealized_pl"]
+        else:
+            row["market_price"] = None
+            row["market_value"] = None
+            row["unrealized_pl"] = None
+        positions.append(row)
+    return {
+        "positions": positions,
+        "totals": {
+            "market_value": round(total_value, 2),
+            "unrealized_pl": round(total_unrealized, 2),
+        },
+    }

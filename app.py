@@ -8,7 +8,7 @@ from pathlib import Path
 from flask import Flask, jsonify, request, send_from_directory
 
 from portfolio.parser import parse_csv
-from portfolio.engine import run_engine, compute_derivative_executions, compute_card_transactions, auto_detect_knocked
+from portfolio.engine import run_engine, compute_derivative_executions, compute_card_transactions, auto_detect_knocked, apply_prices
 from portfolio.tax_report import build_tax_report
 from portfolio.performance import compute_performance
 import licensing as license_module
@@ -30,6 +30,17 @@ else:
 
 CSV_PATH = BASE_DIR / "transactions.csv"
 KD_PATH = BASE_DIR / "knocked_down.json"
+PRICES_PATH = BASE_DIR / "prices.json"
+
+
+def load_prices():
+    if PRICES_PATH.exists():
+        return {k: float(v) for k, v in json.loads(PRICES_PATH.read_text(encoding="utf-8")).items()}
+    return {}
+
+
+def save_prices(prices):
+    PRICES_PATH.write_text(json.dumps(prices, indent=2), encoding="utf-8")
 
 df = None
 if CSV_PATH.exists():
@@ -167,6 +178,33 @@ def api_summary():
 @app.route("/api/open_positions")
 def api_open_positions():
     return jsonify(compute_data(load_knocked_ids())["open_positions"])
+
+
+@app.route("/api/prices", methods=["GET"])
+def api_prices_get():
+    return jsonify(load_prices())
+
+
+@app.route("/api/prices", methods=["POST"])
+def api_prices_post():
+    body = request.get_json(silent=True) or {}
+    isin = (body.get("isin") or "").strip()
+    if not isin:
+        return jsonify({"ok": False, "error": "missing isin"}), 400
+    prices = load_prices()
+    price = body.get("price")
+    if price is None:
+        prices.pop(isin, None)
+    else:
+        prices[isin] = float(price)
+    save_prices(prices)
+    return jsonify({"ok": True, "prices": prices})
+
+
+@app.route("/api/valued_positions")
+def api_valued_positions():
+    result = compute_data(load_knocked_ids())
+    return jsonify(apply_prices(result["open_positions"], load_prices()))
 
 
 @app.route("/api/closed_positions")

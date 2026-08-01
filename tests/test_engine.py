@@ -1,5 +1,5 @@
 import pandas as pd
-from portfolio.engine import run_engine, auto_detect_knocked, compute_derivative_executions
+from portfolio.engine import run_engine, auto_detect_knocked, compute_derivative_executions, apply_prices
 
 
 def _make_df(rows):
@@ -671,3 +671,29 @@ def test_lot_matches_for_knocked_and_tilg():
     assert tilg[0]["cost_basis"] == 100.0
     assert tilg[0]["pl"] == -70.0
     assert tilg[0]["sell_id"] == "t2"
+
+
+def test_apply_prices_computes_unrealized():
+    positions = [
+        {"isin": "A", "name": "A", "asset_class": "STOCK", "shares": 10.0,
+         "average_cost": 50.0, "total_cost": 500.0},
+        {"isin": "B", "name": "B", "asset_class": "FUND", "shares": 5.0,
+         "average_cost": 100.0, "total_cost": 500.0},
+    ]
+    valued = apply_prices(positions, {"A": 60.0})
+    a, b = valued["positions"]
+    assert a["market_price"] == 60.0
+    assert a["market_value"] == 600.0
+    assert a["unrealized_pl"] == 100.0
+    assert b["market_price"] is None
+    assert b["market_value"] is None
+    assert b["unrealized_pl"] is None
+    assert valued["totals"]["market_value"] == 600.0
+    assert valued["totals"]["unrealized_pl"] == 100.0
+
+
+def test_apply_prices_empty_prices():
+    valued = apply_prices([{"isin": "A", "name": "A", "asset_class": "STOCK",
+                            "shares": 1.0, "average_cost": 10.0, "total_cost": 10.0}], {})
+    assert valued["totals"]["market_value"] == 0.0
+    assert valued["positions"][0]["market_price"] is None
