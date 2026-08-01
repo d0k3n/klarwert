@@ -74,3 +74,30 @@ def test_analysis_endpoints_do_not_500():
     ]:
         resp = client.get(endpoint)
         assert resp.status_code == 200, f"{endpoint} returned {resp.status_code}"
+
+
+def test_refresh_prices_endpoint_merges_and_persists(monkeypatch, tmp_path):
+    monkeypatch.setattr(app_module, "PRICES_PATH", tmp_path / "prices.json")
+    monkeypatch.setattr(app_module, "TICKERS_PATH", tmp_path / "tickers.json")
+    app_module.save_prices({"A": {"price": 5.0, "source": "manual"}})
+
+    fake = lambda *a, **k: {
+        "prices": {"B": {"price": 12.0, "source": "yahoo"}},
+        "tickers": {"B": "BB"},
+        "skipped": [{"isin": "A", "reason": "manual"}],
+    }
+    monkeypatch.setattr(app_module, "refresh_prices", fake)
+
+    app_module.df = _df()
+    app_module.invalidate_cache()
+    client = app_module.app.test_client()
+    resp = client.post("/api/refresh_prices")
+    assert resp.status_code == 200
+    body = resp.get_json()
+    assert body["prices"]["B"]["source"] == "yahoo"
+    assert body["skipped"][0]["reason"] == "manual"
+    # manual entry preserved, yahoo entry persisted to disk
+    saved = app_module.load_prices()
+    assert saved["A"] == {"price": 5.0, "source": "manual"}
+    assert saved["B"] == {"price": 12.0, "source": "yahoo"}
+    assert app_module.load_tickers() == {"B": "BB"}

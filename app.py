@@ -11,6 +11,7 @@ from portfolio.parser import parse_csv
 from portfolio.engine import run_engine, compute_derivative_executions, compute_card_transactions, auto_detect_knocked, apply_prices, compute_income, compute_spending
 from portfolio.tax_report import build_tax_report
 from portfolio.performance import compute_performance
+from portfolio.market import refresh_prices
 import support
 
 logging.basicConfig(level=logging.INFO, format="%(levelname)s: %(message)s")
@@ -31,6 +32,7 @@ else:
 CSV_PATH = BASE_DIR / "transactions.csv"
 KD_PATH = BASE_DIR / "knocked_down.json"
 PRICES_PATH = BASE_DIR / "prices.json"
+TICKERS_PATH = BASE_DIR / "tickers.json"
 
 
 def load_prices():
@@ -48,6 +50,16 @@ def load_prices():
 
 def save_prices(prices):
     PRICES_PATH.write_text(json.dumps(prices, indent=2), encoding="utf-8")
+
+
+def load_tickers():
+    if TICKERS_PATH.exists():
+        return json.loads(TICKERS_PATH.read_text(encoding="utf-8"))
+    return {}
+
+
+def save_tickers(tickers):
+    TICKERS_PATH.write_text(json.dumps(tickers, indent=2), encoding="utf-8")
 
 df = None
 if CSV_PATH.exists():
@@ -189,11 +201,30 @@ def api_prices_post():
         prices.pop(isin, None)
     else:
         try:
-            prices[isin] = float(price)
+            prices[isin] = {"price": float(price), "source": "manual"}
         except (TypeError, ValueError):
             return jsonify({"ok": False, "error": "invalid price"}), 400
     save_prices(prices)
     return jsonify({"ok": True, "prices": prices})
+
+
+@app.route("/api/tickers")
+def api_tickers():
+    return jsonify(load_tickers())
+
+
+@app.route("/api/refresh_prices", methods=["POST"])
+def api_refresh_prices():
+    result = compute_data(load_knocked_ids())
+    existing = load_prices()
+    out = refresh_prices(result["open_positions"], existing, load_tickers())
+    prices = dict(existing)
+    prices.update(out["prices"])
+    save_prices(prices)
+    tickers = dict(load_tickers())
+    tickers.update(out["tickers"])
+    save_tickers(tickers)
+    return jsonify({"prices": out["prices"], "skipped": out["skipped"]})
 
 
 @app.route("/api/valued_positions")
