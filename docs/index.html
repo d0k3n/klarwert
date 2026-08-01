@@ -1,0 +1,101 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Klarwert &mdash; Local-first portfolio analyzer for Trade Republic</title>
+<meta name="description" content="Klarwert is a local-first portfolio analyzer for Trade Republic CSV exports. All computation happens on your machine. Your data never leaves it.">
+<link rel="stylesheet" href="style.css">
+</head>
+<body>
+
+<header class="site-header">
+  <div class="container">
+    <span class="brand"><a href="#">Klarwert</a></span>
+    <a class="header-link" href="https://github.com/d0k3n/klarwert">GitHub</a>
+  </div>
+</header>
+
+<section class="hero">
+  <div class="container">
+    <h1>Klarwert</h1>
+    <p class="tagline">Local-first portfolio analyzer for Trade Republic</p>
+    <p class="lede">Drop in your Trade Republic CSV export and get an audit trail, a per-year tax report, performance metrics, unrealized P&amp;L, income and spending analytics, and position concentration &mdash; all on your own machine.</p>
+    <a class="cta" href="https://github.com/d0k3n/klarwert">
+      <svg viewBox="0 0 16 16" width="18" height="18" fill="currentColor" aria-hidden="true">
+        <path d="M8 0C3.58 0 0 3.58 0 8c0 3.54 2.29 6.53 5.47 7.59.4.07.55-.17.55-.38 0-.19-.01-.82-.01-1.49-2.01.37-2.53-.49-2.69-.94-.09-.23-.48-.94-.82-1.13-.28-.15-.68-.52-.01-.53.63-.01 1.08.58 1.23.82.72 1.21 1.87.87 2.33.66.07-.52.28-.87.51-1.07-1.78-.2-3.64-.89-3.64-3.95 0-.87.31-1.59.82-2.15-.08-.2-.36-1.02.08-2.12 0 0 .67-.21 2.2.82.64-.18 1.32-.27 2-.27.68 0 1.36.09 2 .27 1.53-1.04 2.2-.82 2.2-.82.44 1.1.16 1.92.08 2.12.51.56.82 1.27.82 2.15 0 3.07-1.87 3.75-3.65 3.95.29.25.54.73.54 1.48 0 1.07-.01 1.93-.01 2.2 0 .21.15.46.55.38A8.01 8.01 0 0 0 16 8c0-4.42-3.58-8-8-8Z"/>
+      </svg>
+      View on GitHub
+    </a>
+  </div>
+</section>
+
+<section class="privacy">
+  <div class="container">
+    <p style="margin:0">All computation happens on your machine. <strong>Your data never leaves it.</strong></p>
+  </div>
+</section>
+
+<section class="section">
+  <div class="container">
+    <h2>What it does</h2>
+    <div class="feature-grid">
+      <div class="feature-card">
+        <h3>Reconciliation</h3>
+        <p>Sources vs. uses of cash, including trade fees and taxes.</p>
+      </div>
+      <div class="feature-card">
+        <h3>Monthly Realized P&amp;L</h3>
+        <p>Realized profit and loss per month, charted.</p>
+      </div>
+      <div class="feature-card">
+        <h3>FIFO Audit Trail</h3>
+        <p>Per-lot sale matches: buy date, cost basis, proceeds, P&amp;L.</p>
+      </div>
+      <div class="feature-card">
+        <h3>Tax Report</h3>
+        <p>Per-fiscal-year disposals with CSV export.</p>
+      </div>
+      <div class="feature-card">
+        <h3>Dividends &amp; Income</h3>
+        <p>Gross/WHT/net dividends, yield on cost, stacked income charts.</p>
+      </div>
+      <div class="feature-card">
+        <h3>Cash Flow &amp; Spending</h3>
+        <p>Deposits, withdrawals, balances and card spending by MCC category.</p>
+      </div>
+      <div class="feature-card">
+        <h3>Derivative Executions</h3>
+        <p>Warrant and knock-out exercises, including knocked-down lots.</p>
+      </div>
+      <div class="feature-card">
+        <h3>Product Charts</h3>
+        <p>Allocation by product and dividend history.</p>
+      </div>
+    </div>
+  </div>
+</section>
+
+<section class="section">
+  <div class="container">
+    <h2>Quick start</h2>
+    <div class="quickstart">
+      <ol>
+        <li><code>git clone git@github.com:d0k3n/klarwert.git</code></li>
+        <li><code>cd klarwert &amp;&amp; python -m venv venv</code></li>
+        <li><code>source venv/bin/activate &amp;&amp; pip install -r requirements.txt</code></li>
+        <li><code>python app.py</code> &mdash; then open http://127.0.0.1:5000</li>
+      </ol>
+    </div>
+  </div>
+</section>
+
+<footer class="site-footer">
+  <div class="container">
+    <span>Klarwert &mdash; released under the MIT license.</span>
+    <a href="https://github.com/d0k3n/klarwert">github.com/d0k3n/klarwert</a>
+  </div>
+</footer>
+
+</body>
+</html>
