@@ -99,7 +99,7 @@ def test_refresh_prices_endpoint_merges_and_persists(monkeypatch, tmp_path):
     app_module.save_prices({"A": {"price": 5.0, "source": "manual"}})
 
     fake = lambda *a, **k: {
-        "prices": {"B": {"price": 12.0, "source": "yahoo"}},
+        "prices": {"B": {"price": 12.0, "source": "auto"}},
         "tickers": {"B": "BB"},
         "skipped": [{"isin": "A", "reason": "manual"}],
     }
@@ -111,12 +111,12 @@ def test_refresh_prices_endpoint_merges_and_persists(monkeypatch, tmp_path):
     resp = client.post("/api/refresh_prices")
     assert resp.status_code == 200
     body = resp.get_json()
-    assert body["prices"]["B"]["source"] == "yahoo"
+    assert body["prices"]["B"]["source"] == "auto"
     assert body["skipped"][0]["reason"] == "manual"
-    # manual entry preserved, yahoo entry persisted to disk
+    # manual entry preserved, auto entry persisted to disk
     saved = app_module.load_prices()
     assert saved["A"] == {"price": 5.0, "source": "manual"}
-    assert saved["B"] == {"price": 12.0, "source": "yahoo"}
+    assert saved["B"] == {"price": 12.0, "source": "auto"}
     assert app_module.load_tickers() == {"B": "BB"}
 
 
@@ -175,3 +175,26 @@ def test_card_transactions_and_spending_reflect_rules(monkeypatch, tmp_path):
     by_cat = {c["category"]: c["total"] for c in spending["by_category"]}
     assert by_cat["Education"] == 15.0
     assert by_cat["Groceries"] == 50.0
+
+
+def test_refresh_prices_disabled_without_key(monkeypatch, tmp_path):
+    monkeypatch.setattr(app_module, "PRICES_PATH", tmp_path / "prices.json")
+    monkeypatch.setattr(app_module, "refresh_prices", lambda *a, **k: {"disabled": True})
+    app_module.df = _df()
+    app_module.invalidate_cache()
+    client = app_module.app.test_client()
+    resp = client.post("/api/refresh_prices")
+    assert resp.status_code == 200
+    assert resp.get_json() == {"enabled": False, "reason": "no_api_key"}
+
+
+def test_refresh_status_reports_enabled(monkeypatch):
+    monkeypatch.setattr(app_module, "is_configured", lambda: True)
+    client = app_module.app.test_client()
+    assert client.get("/api/refresh_status").get_json() == {"enabled": True}
+
+
+def test_refresh_status_reports_disabled(monkeypatch):
+    monkeypatch.setattr(app_module, "is_configured", lambda: False)
+    client = app_module.app.test_client()
+    assert client.get("/api/refresh_status").get_json() == {"enabled": False}

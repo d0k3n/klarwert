@@ -14,7 +14,7 @@ from portfolio.engine import (
 )
 from portfolio.tax_report import build_tax_report
 from portfolio.performance import compute_performance
-from portfolio.market import refresh_prices
+from portfolio.market import refresh_prices, is_configured
 import support
 
 logging.basicConfig(level=logging.INFO, format="%(levelname)s: %(message)s")
@@ -228,11 +228,18 @@ def api_tickers():
     return jsonify(load_tickers())
 
 
+@app.route("/api/refresh_status")
+def api_refresh_status():
+    return jsonify({"enabled": is_configured()})
+
+
 @app.route("/api/refresh_prices", methods=["POST"])
 def api_refresh_prices():
     result = compute_data(load_knocked_ids())
     existing = load_prices()
     out = refresh_prices(result["open_positions"], existing, load_tickers())
+    if out.get("disabled"):
+        return jsonify({"enabled": False, "reason": "no_api_key"})
     prices = dict(existing)
     prices.update(out["prices"])
     save_prices(prices)
