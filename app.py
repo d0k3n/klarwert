@@ -22,7 +22,7 @@ def resource_path(rel):
 
 
 if getattr(sys, "_MEIPASS", None):
-    BASE_DIR = Path(os.environ.get("APPDATA", Path.home())) / "TradeRepublicAnalyzer"
+    BASE_DIR = Path(os.environ.get("APPDATA", Path.home())) / "Klarwert"
     BASE_DIR.mkdir(parents=True, exist_ok=True)
 else:
     BASE_DIR = Path(__file__).parent

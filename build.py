@@ -2,7 +2,7 @@ import PyInstaller.__main__
 
 PyInstaller.__main__.run([
     "desktop_app.py",
-    "--name=TradeRepublicAnalyzer",
+    "--name=Klarwert",
     "--onefile",
     "--windowed",
     "--noconsole",

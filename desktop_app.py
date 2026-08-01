@@ -50,7 +50,7 @@ def main():
         sys.exit(1)
 
     webview.create_window(
-        "Trade Republic Portfolio Analyzer",
+        "Klarwert",
         url,
         width=1280,
         height=900,
