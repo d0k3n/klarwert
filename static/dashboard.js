@@ -214,6 +214,15 @@ function groupData(data, groupBy, numericFields, averageFields) {
           const tc = items.reduce((acc, r) => acc + (r.total_cost || 0), 0);
           const sh = items.reduce((acc, r) => acc + (r.shares || 0), 0);
           grp[f] = sh > 0 ? tc / sh : 0;
+        } else if (f === 'market_price') {
+          const priced = items.filter(r => r.market_price != null);
+          const val = priced.reduce((acc, r) => acc + ((r.shares || 0) * r.market_price), 0);
+          const sh = priced.reduce((acc, r) => acc + (r.shares || 0), 0);
+          grp[f] = sh > 0 ? val / sh : null;
+        } else if (f === 'yield_on_cost') {
+          const net = items.reduce((acc, r) => acc + (r.total_dividends_net || 0), 0);
+          const cost = items.reduce((acc, r) => acc + (r.total_cost || 0), 0);
+          grp[f] = cost > 0 ? Math.round(100 * net / cost * 100) / 100 : null;
         } else {
           grp[f] = items.reduce((acc, r) => acc + (r[f] || 0), 0);
         }
@@ -828,6 +837,7 @@ lines.push("");
 lines.push("type;gross;wht;net");
 lines.push(`dividends;${lastTaxReport.dividend_totals.gross};${lastTaxReport.dividend_totals.wht};${lastTaxReport.dividend_totals.net}`);
 lines.push(`interest;${lastTaxReport.interest};;${lastTaxReport.interest}`);
+lines.push(`saveback;${lastTaxReport.saveback};;${lastTaxReport.saveback}`);
 const blob = new Blob([lines.join("\n")], { type: "text/csv" });
 const a = document.createElement("a");
 a.href = URL.createObjectURL(blob);

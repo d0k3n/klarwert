@@ -196,7 +196,10 @@ def api_prices_post():
     if price is None:
         prices.pop(isin, None)
     else:
-        prices[isin] = float(price)
+        try:
+            prices[isin] = float(price)
+        except (TypeError, ValueError):
+            return jsonify({"ok": False, "error": "invalid price"}), 400
     save_prices(prices)
     return jsonify({"ok": True, "prices": prices})
 
