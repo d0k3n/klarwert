@@ -27,3 +27,26 @@ def get_api_key():
 
 def is_configured():
     return bool(get_api_key())
+
+
+SEARCH_PATH = "/search"
+
+GOOD_TYPES = {"Common Stock", "ETP", "Fund", "Depositary Receipt"}
+
+
+def _finnhub_get(session, path, params):
+    key = get_api_key()
+    if not key:
+        raise RuntimeError("Finnhub API key not configured")
+    resp = session.get(FINNHUB_BASE + path, params=dict(params, token=key), timeout=10)
+    resp.raise_for_status()
+    return resp
+
+
+def resolve_ticker(isin, session=None):
+    session = session or requests.Session()
+    resp = _finnhub_get(session, SEARCH_PATH, {"q": isin})
+    for quote in resp.json().get("result", []):
+        if quote.get("type") in GOOD_TYPES:
+            return quote.get("symbol")
+    return None
