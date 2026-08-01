@@ -997,7 +997,15 @@ positions.forEach(p => {
   container.appendChild(row);
 });
 const btn = document.getElementById("refresh-prices-btn");
-if (btn) btn.style.display = positions.length ? "" : "none";
+if (btn) {
+  btn.style.display = positions.length ? "" : "none";
+  fetch(`${BASE}/api/refresh_status`).then(r => r.json()).then(s => {
+    if (s.enabled === false) {
+      btn.disabled = true;
+      btn.title = "No Finnhub API key configured (set FINNHUB_API_KEY in .env)";
+    }
+  }).catch(() => {});
+}
 }
 
 window.refreshPrices = async function () {
@@ -1013,6 +1021,10 @@ window.refreshPrices = async function () {
       return;
     }
     const data = await r.json();
+    if (data.enabled === false) {
+      status.textContent = "Live prices disabled: no Finnhub API key configured.";
+      return;
+    }
     const updated = data.prices || {};
     const updatedCount = Object.keys(updated).length;
     const skipped = data.skipped || [];
@@ -1033,7 +1045,7 @@ window.refreshPrices = async function () {
       .map(s => `${s.isin}: ${s.message}`).join(" | ");
     if (detail) console.warn("Price refresh details:", detail);
   } catch (e) {
-    status.textContent = "Failed to fetch prices from Yahoo.";
+    status.textContent = "Failed to fetch prices.";
   } finally {
     btn.disabled = false;
   }
