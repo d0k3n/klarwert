@@ -642,7 +642,8 @@ def apply_prices(open_positions, prices):
     total_value = 0.0
     total_unrealized = 0.0
     for p in open_positions:
-        price = prices.get(p["isin"])
+        entry = prices.get(p["isin"])
+        price = entry["price"] if isinstance(entry, dict) else entry
         row = dict(p)
         if price is not None:
             row["market_price"] = price

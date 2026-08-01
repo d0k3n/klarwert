@@ -35,7 +35,14 @@ PRICES_PATH = BASE_DIR / "prices.json"
 
 def load_prices():
     if PRICES_PATH.exists():
-        return {k: float(v) for k, v in json.loads(PRICES_PATH.read_text(encoding="utf-8")).items()}
+        data = json.loads(PRICES_PATH.read_text(encoding="utf-8"))
+        out = {}
+        for k, v in data.items():
+            if isinstance(v, dict):
+                out[k] = {"price": float(v["price"]), "source": v.get("source", "manual")}
+            else:
+                out[k] = {"price": float(v), "source": "manual"}
+        return out
     return {}
 
 

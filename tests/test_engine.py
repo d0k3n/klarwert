@@ -699,6 +699,22 @@ def test_apply_prices_empty_prices():
     assert valued["positions"][0]["market_price"] is None
 
 
+def test_apply_prices_accepts_legacy_flat_price():
+    positions = [{"isin": "A", "name": "A", "asset_class": "STOCK",
+                  "shares": 10.0, "average_cost": 50.0, "total_cost": 500.0}]
+    valued = apply_prices(positions, {"A": 60.0})
+    assert valued["positions"][0]["market_price"] == 60.0
+    assert valued["totals"]["market_value"] == 600.0
+
+
+def test_apply_prices_accepts_nested_price_dict():
+    positions = [{"isin": "A", "name": "A", "asset_class": "STOCK",
+                  "shares": 10.0, "average_cost": 50.0, "total_cost": 500.0}]
+    valued = apply_prices(positions, {"A": {"price": 60.0, "source": "yahoo"}})
+    assert valued["positions"][0]["market_price"] == 60.0
+    assert valued["totals"]["market_value"] == 600.0
+
+
 def test_compute_income_monthly_and_history():
     df = _make_df([
         {"datetime": pd.Timestamp("2025-06-15", tz="UTC"), "tx_type": "DIVIDEND", "name": "ABC", "symbol": "US1",
