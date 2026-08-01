@@ -94,3 +94,43 @@ def test_resolve_returns_none_when_no_result(keyed):
 def test_resolve_returns_none_when_only_derivative(keyed):
     s = FakeSession([("/search", _search("DE000FD8B5S9", "Warrant"))])
     assert resolve_ticker("DE000FD8B5S9", s) is None
+
+
+from portfolio.market import fetch_price, _infer_currency
+
+
+def test_fetch_price_returns_price_and_profile_currency(keyed):
+    s = FakeSession([
+        ("/quote", {"c": 150.5}),
+        ("/stock/profile2", {"currency": "USD"}),
+    ])
+    price, currency = fetch_price("AAPL", s)
+    assert price == 150.5
+    assert currency == "USD"
+
+
+def test_fetch_price_infers_suffix_currency_when_profile_blocked(keyed):
+    s = FakeSession([
+        ("/quote", {"c": 10.0}),
+        ("/stock/profile2", {"error": "You don't have access to this resource."}),
+    ])
+    price, currency = fetch_price("CSPX.L", s)
+    assert price == 10.0
+    assert currency == "GBP"
+
+
+def test_fetch_price_infers_usd_for_bare_symbol(keyed):
+    s = FakeSession([
+        ("/quote", {"c": 20.0}),
+        ("/stock/profile2", {"error": "blocked"}),
+    ])
+    _, currency = fetch_price("NFLX", s)
+    assert currency == "USD"
+
+
+def test_infer_currency_suffixes():
+    assert _infer_currency("SAP.DE") == "EUR"
+    assert _infer_currency("NOVO B.CO") == "DKK"
+    assert _infer_currency("VOW.DE") == "EUR"
+    assert _infer_currency("AAPL") == "USD"
+    assert _infer_currency("7203.T") == "JPY"

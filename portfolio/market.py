@@ -50,3 +50,36 @@ def resolve_ticker(isin, session=None):
         if quote.get("type") in GOOD_TYPES:
             return quote.get("symbol")
     return None
+
+
+QUOTE_PATH = "/quote"
+PROFILE_PATH = "/stock/profile2"
+
+_SUFFIX_CURRENCY = {
+    ".L": "GBP", ".DE": "EUR", ".F": "EUR", ".BE": "EUR",
+    ".PA": "EUR", ".AS": "EUR", ".MI": "EUR", ".CO": "DKK",
+    ".T": "JPY", ".TO": "CAD", ".HK": "HKD",
+}
+
+
+def _profile_currency(session, ticker):
+    try:
+        resp = _finnhub_get(session, PROFILE_PATH, {"symbol": ticker})
+        return resp.json().get("currency")
+    except Exception:
+        return None
+
+
+def _infer_currency(ticker):
+    return _SUFFIX_CURRENCY.get("." + ticker.rsplit(".", 1)[-1].upper(), "USD")
+
+
+def fetch_price(ticker, session=None):
+    session = session or requests.Session()
+    resp = _finnhub_get(session, QUOTE_PATH, {"symbol": ticker})
+    data = resp.json()
+    if "c" not in data:
+        raise ValueError(f"no quote for {ticker}")
+    price = float(data["c"])
+    currency = _profile_currency(session, ticker) or _infer_currency(ticker)
+    return price, currency
