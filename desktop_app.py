@@ -47,7 +47,6 @@ def main():
         url,
         width=1280,
         height=900,
-        icon=resource_path("assets/app.ico"),
     )
     webview.start()
 
