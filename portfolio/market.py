@@ -1,4 +1,5 @@
 import os
+import sys
 import time
 from pathlib import Path
 
@@ -7,7 +8,10 @@ import requests
 FINNHUB_BASE = "https://finnhub.io/api/v1"
 FRANKFURTER_URL = "https://api.frankfurter.dev/v1/latest"
 
-ENV_PATH = Path(__file__).resolve().parent.parent / ".env"
+if getattr(sys, "_MEIPASS", None):
+    ENV_PATH = Path(os.environ.get("APPDATA", Path.home())) / "Klarwert" / ".env"
+else:
+    ENV_PATH = Path(__file__).resolve().parent.parent / ".env"
 
 
 def _load_dotenv():
@@ -30,15 +34,33 @@ def is_configured():
     return bool(get_api_key())
 
 
+def _redact_key(text):
+    key = get_api_key()
+    if key and key in text:
+        return text.replace(key, "***")
+    return text
+
+
 SEARCH_PATH = "/search"
 
 GOOD_TYPES = {"Common Stock", "ETP", "Fund", "Depositary Receipt"}
+
+
+def _pace(session, delay):
+    if not delay:
+        return
+    last = getattr(session, "_finnhub_last", 0.0)
+    wait = last + delay - time.monotonic()
+    if wait > 0:
+        time.sleep(wait)
+    session._finnhub_last = time.monotonic()
 
 
 def _finnhub_get(session, path, params):
     key = get_api_key()
     if not key:
         raise RuntimeError("Finnhub API key not configured")
+    _pace(session, getattr(session, "_finnhub_delay", 0.0))
     resp = session.get(FINNHUB_BASE + path, params=dict(params, token=key), timeout=10)
     resp.raise_for_status()
     return resp
@@ -82,7 +104,8 @@ def fetch_price(ticker, session=None):
     if "c" not in data:
         raise ValueError(f"no quote for {ticker}")
     price = float(data["c"])
-    currency = _profile_currency(session, ticker) or _infer_currency(ticker)
+    inferred = _infer_currency(ticker)
+    currency = inferred if inferred != "USD" else (_profile_currency(session, ticker) or inferred)
     return price, currency
 
 
@@ -111,6 +134,7 @@ def refresh_prices(positions, existing_prices, ticker_cache, session=None, delay
     if not is_configured():
         return {"disabled": True, "prices": {}, "tickers": {}, "skipped": []}
     session = session or requests.Session()
+    session._finnhub_delay = delay
     prices = {}
     tickers = {}
     skipped = []
@@ -130,7 +154,6 @@ def refresh_prices(positions, existing_prices, ticker_cache, session=None, delay
             prices[isin] = {"price": round(float(price), 6), "source": "auto"}
             tickers[isin] = ticker
         except Exception as exc:
-            skipped.append({"isin": isin, "reason": "fetch_error", "message": f"{type(exc).__name__}: {exc}"})
-        if delay:
-            time.sleep(delay)
+            message = _redact_key(f"{type(exc).__name__}: {exc}")
+            skipped.append({"isin": isin, "reason": "fetch_error", "message": message})
     return {"prices": prices, "tickers": tickers, "skipped": skipped}

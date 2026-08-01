@@ -208,6 +208,94 @@ def test_refresh_isolates_network_failure_per_isin(keyed):
     assert all(item["reason"] == "fetch_error" for item in out["skipped"])
 
 
+class LeakySession(FakeSession):
+    def get(self, url, params=None, timeout=None):
+        raise RuntimeError(f"HTTP 429 for url: {url}?token={params['token']}")
+
+
+def test_fetch_error_message_redacts_api_key(keyed):
+    positions = [{"isin": "A", "name": "A"}]
+    s = LeakySession([])
+    out = refresh_prices(positions, {}, {}, s, delay=0)
+    msg = out["skipped"][0]["message"]
+    assert msg.startswith("RuntimeError: ")
+    assert "test-key" not in msg
+    assert "***" in msg
+
+
+def test_finnhub_get_paces_requests(monkeypatch, keyed):
+    now = [100.0]
+    monkeypatch.setattr(market.time, "monotonic", lambda: now[0])
+    sleeps = []
+    monkeypatch.setattr(market.time, "sleep", lambda x: sleeps.append(x))
+    s = FakeSession([("/quote", {"c": 1.0})])
+    s._finnhub_delay = 1.0
+    market._finnhub_get(s, market.QUOTE_PATH, {"symbol": "AAPL"})
+    assert sleeps == []
+    now[0] += 0.2
+    market._finnhub_get(s, market.QUOTE_PATH, {"symbol": "AAPL"})
+    assert len(sleeps) == 1
+    assert abs(sleeps[0] - 0.8) < 0.01
+    now[0] += 2.0
+    market._finnhub_get(s, market.QUOTE_PATH, {"symbol": "AAPL"})
+    assert len(sleeps) == 1
+
+
+def test_refresh_paces_each_request(monkeypatch, keyed):
+    now = [100.0]
+    monkeypatch.setattr(market.time, "monotonic", lambda: now[0])
+    sleeps = []
+    monkeypatch.setattr(market.time, "sleep", lambda x: sleeps.append(x))
+    positions = [{"isin": "US0378331005", "name": "AAPL"}]
+    s = FakeSession([
+        ("/search", _search("AAPL", "Common Stock")),
+        ("/quote", {"c": 150.5}),
+        ("/stock/profile2", {"currency": "USD"}),
+    ])
+    refresh_prices(positions, {}, {}, s, delay=0.5)
+    assert len(sleeps) == 2
+
+
+def test_fetch_price_skips_profile2_for_known_suffix(keyed):
+    s = FakeSession([("/quote", {"c": 10.0})])
+    price, currency = fetch_price("SAP.DE", s)
+    assert price == 10.0
+    assert currency == "EUR"
+    assert not any("/stock/profile2" in url for url, _ in s.calls)
+
+
+def test_fetch_price_prefers_profile_currency_for_bare_symbol(keyed):
+    s = FakeSession([
+        ("/quote", {"c": 20.0}),
+        ("/stock/profile2", {"currency": "GBP"}),
+    ])
+    _, currency = fetch_price("NFLX", s)
+    assert currency == "GBP"
+
+
+def test_refresh_manual_source_performs_no_network_calls(keyed):
+    positions = [{"isin": "A", "name": "A"}]
+    existing = {"A": {"price": 5.0, "source": "manual"}}
+    s = FakeSession([("/search", _search("X", "Common Stock"))])
+    out = refresh_prices(positions, existing, {}, s, delay=0)
+    assert s.calls == []
+    assert any(item["reason"] == "manual" for item in out["skipped"])
+
+
+def test_refresh_overwrites_legacy_flat_and_yahoo_entries(keyed):
+    positions = [{"isin": "A", "name": "A"}, {"isin": "B", "name": "B"}]
+    existing = {"A": 5.0, "B": {"price": 6.0, "source": "yahoo"}}
+    s = FakeSession([
+        ("/search", _search("X", "Common Stock")),
+        ("/quote", {"c": 1.0}),
+        ("/stock/profile2", {"currency": "USD"}),
+        ("api.frankfurter.dev", {"rates": {"EUR": 1.0}}),
+    ])
+    out = refresh_prices(positions, existing, {}, s, delay=0)
+    assert out["prices"]["A"]["source"] == "auto"
+    assert out["prices"]["B"]["source"] == "auto"
+
+
 from portfolio.market import fx_rate, to_eur
 
 
