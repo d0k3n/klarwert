@@ -4,7 +4,8 @@
 
 - Summary cards: XIRR, win rate, average win/loss, market value, unrealized P&L, top-5 concentration
 - Cash-flow reconciliation (sources vs uses, incl. fees and taxes)
-- Monthly realized P&L, open/closed positions, results by product
+- Monthly realized P&L plus a weekly view with day-level granularity and week navigation
+- Open/closed positions, results by product
 - Derivative executions (warrants, knock-outs) with FIFO audit trail
 - Per-year tax report with CSV export
 - Income, cash-flow and card-spending analytics
