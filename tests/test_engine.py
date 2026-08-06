@@ -129,6 +129,56 @@ def test_knocked_buy_generates_negative_pl():
     # Monthly PL should reflect the loss
     assert len(result["monthly_pl"]) == 1
     assert result["monthly_pl"][0]["realized_pl"] == round(expected_pl, 2)
+    # Daily PL should book the loss on the buy date
+    assert result["daily_pl"] == [{"date": "2025-06-01", "realized_pl": round(expected_pl, 2)}]
+
+
+def test_daily_pl_by_date():
+    df = _make_df([
+        {"datetime": pd.Timestamp("2025-06-01", tz="UTC"), "tx_type": "BUY", "name": "X", "symbol": "X",
+         "asset_class": "STOCK", "shares": 10.0, "price": 50.0, "amount": -500.0, "fee": 0.0, "tax": 0.0},
+        {"datetime": pd.Timestamp("2025-07-01", tz="UTC"), "tx_type": "SELL", "name": "X", "symbol": "X",
+         "asset_class": "STOCK", "shares": 4.0, "price": 60.0, "amount": 240.0, "fee": 0.0, "tax": 0.0},
+        {"datetime": pd.Timestamp("2025-07-02", tz="UTC"), "tx_type": "SELL", "name": "X", "symbol": "X",
+         "asset_class": "STOCK", "shares": 6.0, "price": 60.0, "amount": 360.0, "fee": 0.0, "tax": 0.0},
+    ])
+    result = run_engine(df)
+    daily = {d["date"]: d["realized_pl"] for d in result["daily_pl"]}
+    assert daily == {"2025-07-01": 40.0, "2025-07-02": 60.0}
+
+
+def test_daily_pl_sums_equal_monthly_pl():
+    df = _make_df([
+        {"datetime": pd.Timestamp("2025-06-01", tz="UTC"), "tx_type": "BUY", "name": "W", "symbol": "DE100",
+         "asset_class": "DERIVATIVE", "shares": 100.0, "price": 5.0, "amount": -500.0, "fee": 0.0, "tax": 0.0},
+        {"datetime": pd.Timestamp("2025-06-20", tz="UTC"), "tx_type": "TILG", "name": "W", "symbol": "DE100",
+         "asset_class": "DERIVATIVE", "shares": 0.0, "price": 0.0, "amount": 300.0, "fee": 0.0, "tax": 0.0},
+        {"datetime": pd.Timestamp("2025-07-01", tz="UTC"), "tx_type": "SELL", "name": "Y", "symbol": "Y",
+         "asset_class": "STOCK", "shares": 10.0, "price": 60.0, "amount": 600.0, "fee": 1.0, "tax": 0.0,
+         "transaction_id": "s1"},
+        {"datetime": pd.Timestamp("2025-06-01", tz="UTC"), "tx_type": "BUY", "name": "Y", "symbol": "Y",
+         "asset_class": "STOCK", "shares": 10.0, "price": 50.0, "amount": -500.0, "fee": 0.0, "tax": 0.0},
+    ])
+    result = run_engine(df)
+    daily_total = sum(d["realized_pl"] for d in result["daily_pl"])
+    monthly_total = sum(d["realized_pl"] for d in result["monthly_pl"])
+    assert round(daily_total, 2) == round(monthly_total, 2)
+
+
+def test_daily_pl_knocked_booked_at_exercise_date():
+    df = _make_df([
+        {"datetime": pd.Timestamp("2025-01-15", tz="UTC"), "type": "BUY", "tx_type": "BUY",
+         "name": "TURBO", "symbol": "TURBO", "asset_class": "DERIVATIVE",
+         "shares": 100.0, "price": 5.0, "amount": -500.0, "fee": 2.0, "tax": 0.0,
+         "transaction_id": "b1", "knocked": True},
+        {"datetime": pd.Timestamp("2025-03-06", tz="UTC"), "type": "WARRANT_EXERCISE", "tx_type": "SELL",
+         "name": "TURBO", "symbol": "TURBO", "asset_class": "DERIVATIVE",
+         "shares": 100.0, "price": 0.0, "amount": 0.0, "fee": 0.0, "tax": 0.0,
+         "transaction_id": "we1"},
+    ])
+    result = run_engine(df)
+    daily = {d["date"]: d["realized_pl"] for d in result["daily_pl"]}
+    assert daily == {"2025-03-06": round(-(100 * 5 + 2), 2)}
 
 
 def test_knocked_buy_with_other_lots():

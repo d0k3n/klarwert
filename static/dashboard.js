@@ -15,6 +15,7 @@ return r.json();
 
 let cashFlowChart = null;
 let monthlyPLChart = null;
+let weeklyPLChart = null;
 let allocationChart = null;
 let dividendChart = null;
 let incomeChart = null;
@@ -62,7 +63,7 @@ const TABLE_CONFIGS = {
 };
 
 async function loadAllData() {
-const [summary, valuedPositions, closedPositions, cashFlow, transactions, products, monthlyPl, derivativeExecutions, cardTransactions, lotMatches, perfData, income, spending, cardRules] = await Promise.all([
+const [summary, valuedPositions, closedPositions, cashFlow, transactions, products, monthlyPl, dailyPl, derivativeExecutions, cardTransactions, lotMatches, perfData, income, spending, cardRules] = await Promise.all([
 loadJSON(`${BASE}/api/summary`),
 loadJSON(`${BASE}/api/valued_positions`),
 loadJSON(`${BASE}/api/closed_positions`),
@@ -70,6 +71,7 @@ loadJSON(`${BASE}/api/cash_flow`),
 loadJSON(`${BASE}/api/transactions`),
 loadJSON(`${BASE}/api/products`),
 loadJSON(`${BASE}/api/monthly_pl`),
+loadJSON(`${BASE}/api/daily_pl`),
 loadJSON(`${BASE}/api/derivative_executions`),
 loadJSON(`${BASE}/api/card_transactions`),
 loadJSON(`${BASE}/api/lot_matches`),
@@ -96,6 +98,7 @@ renderTable("closed-positions-table", closedPositions, TABLE_CONFIGS['closed-pos
 renderCashFlowChart(cashFlow);
 renderTransactions(transactions);
 renderMonthlyPLChart(monthlyPl);
+renderWeeklyPLChart(dailyPl);
 renderTable("product-results-table", products, TABLE_CONFIGS['product-results-table']);
 renderAllocationChart(openPositions);
 renderDividendChart(products);
@@ -679,6 +682,135 @@ function renderMonthlyPLChart(data) {
     },
   });
 }
+
+let weeklyWeeks = [];
+let weeklyIndex = 0;
+
+function parseDate(s) {
+  const [y, m, d] = s.split("-").map(Number);
+  return new Date(y, m - 1, d);
+}
+
+function weekKey(d) {
+  const y = d.getFullYear();
+  const m = String(d.getMonth() + 1).padStart(2, "0");
+  const day = String(d.getDate()).padStart(2, "0");
+  return `${y}-${m}-${day}`;
+}
+
+function startOfWeek(date) {
+  const d = new Date(date.getFullYear(), date.getMonth(), date.getDate());
+  const diff = d.getDay() === 0 ? -6 : 1 - d.getDay();
+  d.setDate(d.getDate() + diff);
+  return d;
+}
+
+function buildWeeks(daily) {
+  const byDate = new Map();
+  (daily || []).forEach(d => byDate.set(d.date, d.realized_pl));
+  const dates = [...byDate.keys()].sort();
+  if (!dates.length) return [];
+  const weeks = [];
+  const cursor = startOfWeek(parseDate(dates[0]));
+  const lastDate = parseDate(dates[dates.length - 1]);
+  while (cursor <= lastDate) {
+    const days = [];
+    let total = 0;
+    for (let i = 0; i < 7; i++) {
+      const key = weekKey(cursor);
+      const pl = byDate.has(key) ? byDate.get(key) : null;
+      if (pl != null) total += pl;
+      days.push({ date: key, pl });
+      cursor.setDate(cursor.getDate() + 1);
+    }
+    weeks.push({ days, total });
+  }
+  return weeks;
+}
+
+function renderWeeklyPLChart(daily) {
+  weeklyWeeks = buildWeeks(daily);
+  weeklyIndex = weeklyWeeks.length ? weeklyWeeks.length - 1 : 0;
+  drawWeeklyPL();
+}
+
+function formatWeekLabel(week) {
+  const first = parseDate(week.days[0].date);
+  const last = parseDate(week.days[6].date);
+  const fmt = d => d.toLocaleDateString(undefined, { month: "short", day: "numeric" });
+  return `${fmt(first)} - ${fmt(last)}, ${last.getFullYear()}`;
+}
+
+function drawWeeklyPL() {
+  const ctx = document.getElementById("weekly-pl-chart").getContext("2d");
+  const labelEl = document.getElementById("week-label");
+  const totalEl = document.getElementById("week-total");
+  const prevBtn = document.getElementById("week-prev");
+  const nextBtn = document.getElementById("week-next");
+  if (weeklyPLChart) weeklyPLChart.destroy();
+  weeklyPLChart = null;
+  if (!weeklyWeeks.length) {
+    if (labelEl) labelEl.textContent = "No P/L data yet";
+    if (totalEl) totalEl.textContent = "";
+    if (prevBtn) prevBtn.disabled = true;
+    if (nextBtn) nextBtn.disabled = true;
+    return;
+  }
+  const week = weeklyWeeks[weeklyIndex];
+  const labels = week.days.map(d => parseDate(d.date).toLocaleDateString(undefined, { weekday: "short", day: "numeric" }));
+  const values = week.days.map(d => d.pl);
+  if (labelEl) labelEl.textContent = formatWeekLabel(week);
+  if (totalEl) {
+    const t = week.total;
+    totalEl.textContent = `Week P&L: \u20AC${t.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
+    totalEl.className = t >= 0 ? "positive" : "negative";
+  }
+  if (prevBtn) prevBtn.disabled = weeklyIndex === 0;
+  if (nextBtn) nextBtn.disabled = weeklyIndex >= weeklyWeeks.length - 1;
+
+  weeklyPLChart = new Chart(ctx, {
+    type: "bar",
+    data: {
+      labels,
+      datasets: [{
+        label: "Realized P&L",
+        data: values,
+        backgroundColor: values.map(v => v == null ? "#30363d" : (v >= 0 ? CHART_GREEN : CHART_RED)),
+      }],
+    },
+    options: {
+      responsive: true,
+      plugins: {
+        legend: { display: false },
+        tooltip: {
+          backgroundColor: "#21262d", titleColor: "#e6edf3", bodyColor: "#e6edf3",
+          callbacks: {
+            title: (items) => {
+              const i = items[0].dataIndex;
+              return week.days[i].date;
+            },
+            label: (c) => {
+              const d = week.days[c.dataIndex];
+              return d.pl == null
+                ? "No activity"
+                : `\u20AC${d.pl.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
+            },
+          },
+        },
+      },
+      scales: {
+        x: { ticks: { color: "#8b949e" }, grid: { color: "#21262d" } },
+        y: { beginAtZero: true, ticks: { color: "#8b949e" }, grid: { color: "#21262d" } },
+      },
+    },
+  });
+}
+
+window.weeklyNav = function (delta) {
+  if (!weeklyWeeks.length) return;
+  weeklyIndex = Math.max(0, Math.min(weeklyWeeks.length - 1, weeklyIndex + delta));
+  drawWeeklyPL();
+};
 
 function renderAllocationChart(openPositions) {
   if (allocationChart) allocationChart.destroy();

@@ -204,6 +204,25 @@ tbody tr:nth-child(even):hover { background: var(--bg-elevated); }
 #product-charts > div { display: flex; gap: 24px; flex-wrap: wrap; }
 #product-charts > div > div { flex: 1; min-width: 300px; }
 
+/* Weekly P/L navigation */
+.week-nav {
+  display: flex; align-items: center; gap: 10px; margin-bottom: 8px;
+}
+.week-nav button {
+  background: var(--bg-surface); color: var(--text-primary);
+  border: 1px solid var(--border-color); border-radius: 6px;
+  padding: 6px 12px; font-size: 0.85rem; cursor: pointer;
+}
+.week-nav button:hover:not(:disabled) { border-color: var(--accent-blue); color: var(--accent-blue); }
+.week-nav button:disabled { opacity: 0.4; cursor: default; }
+#week-label { font-size: 0.9rem; font-weight: 600; color: var(--text-primary); }
+#week-total {
+  font-size: 0.9rem; font-weight: 600;
+  font-family: 'SF Mono', 'JetBrains Mono', 'Cascadia Code', monospace;
+}
+#week-total.positive { color: var(--color-positive); }
+#week-total.negative { color: var(--color-negative); }
+
 /* Responsive */
 @media (max-width: 768px) {
   body { padding: 12px; }

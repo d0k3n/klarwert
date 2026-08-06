@@ -48,6 +48,7 @@ def run_engine(df):
         by_isin[row["symbol"]].append(row)
 
     monthly_pl = defaultdict(float)
+    daily_pl = defaultdict(float)
     lot_matches = []
     per_product = {}
 
@@ -93,6 +94,7 @@ def run_engine(df):
                 realized_pl = amount - cost
                 month = row["datetime"].strftime("%Y-%m")
                 monthly_pl[month] += realized_pl
+                daily_pl[row["datetime"].strftime("%Y-%m-%d")] += realized_pl
                 cp = closed_positions[isin]
                 cp["isin"] = isin
                 cp["name"] = name
@@ -133,6 +135,7 @@ def run_engine(df):
                     ko_dt = we_dates.get(isin, row["datetime"])
                     month = ko_dt.strftime("%Y-%m")
                     monthly_pl[month] += realized_pl
+                    daily_pl[ko_dt.strftime("%Y-%m-%d")] += realized_pl
                     cp = closed_positions[isin]
                     cp["isin"] = isin
                     cp["name"] = name
@@ -156,6 +159,7 @@ def run_engine(df):
                         proceeds_portion = -neg.total_cost * (covered / -neg.shares)
                         cover_pl = proceeds_portion - covered * price
                         month = row["datetime"].strftime("%Y-%m")
+                        daily_pl[row["datetime"].strftime("%Y-%m-%d")] += cover_pl
                         monthly_pl[month] += cover_pl
                         cp = closed_positions[isin]
                         cp["isin"] = isin
@@ -178,6 +182,7 @@ def run_engine(df):
                         to_allocate -= covered
                         if -neg.shares < 0.001:
                             monthly_pl[month] += -neg.total_cost
+                            daily_pl[row["datetime"].strftime("%Y-%m-%d")] += -neg.total_cost
                             cp["total_realized_pl"] += -neg.total_cost
                             open_lots.pop(0)
                     if to_allocate > 0:
@@ -241,6 +246,7 @@ def run_engine(df):
                 month = row["datetime"].strftime("%Y-%m")
                 if realized_pl != 0:
                     monthly_pl[month] += realized_pl
+                    daily_pl[row["datetime"].strftime("%Y-%m-%d")] += realized_pl
                 cp = closed_positions[isin]
                 cp["isin"] = isin
                 cp["name"] = name
@@ -255,6 +261,7 @@ def run_engine(df):
         if abs(dust_cost) > 0 and last_dt is not None:
             month = last_dt.strftime("%Y-%m")
             monthly_pl[month] += -dust_cost
+            daily_pl[last_dt.strftime("%Y-%m-%d")] += -dust_cost
             cp = closed_positions[isin]
             cp["isin"] = isin
             cp["name"] = name
@@ -380,6 +387,7 @@ def run_engine(df):
         "transactions": transactions,
         "products": list(per_product.values()),
         "monthly_pl": [{"month": m, "realized_pl": round(v, 2)} for m, v in sorted(monthly_pl.items())],
+        "daily_pl": [{"date": d, "realized_pl": round(v, 2)} for d, v in sorted(daily_pl.items())],
         "lot_matches": lot_matches,
     }
 

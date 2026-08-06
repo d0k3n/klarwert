@@ -119,6 +119,7 @@ EMPTY_RESULT = {
     "transactions": [],
     "products": [],
     "monthly_pl": [],
+    "daily_pl": [],
     "lot_matches": [],
 }
 
@@ -285,6 +286,11 @@ def api_products():
 @app.route("/api/monthly_pl")
 def api_monthly_pl():
     return jsonify(compute_data(load_knocked_ids())["monthly_pl"])
+
+
+@app.route("/api/daily_pl")
+def api_daily_pl():
+    return jsonify(compute_data(load_knocked_ids())["daily_pl"])
 
 
 @app.route("/api/lot_matches")

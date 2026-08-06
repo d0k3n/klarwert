@@ -56,6 +56,17 @@
 </section>
 
 <section>
+  <h2>Weekly Realized P&amp;L</h2>
+  <div class="week-nav">
+    <button id="week-prev" onclick="window.weeklyNav(-1)">&laquo; Prev</button>
+    <span id="week-label"></span>
+    <button id="week-next" onclick="window.weeklyNav(1)">Next &raquo;</button>
+  </div>
+  <p id="week-total"></p>
+  <canvas id="weekly-pl-chart"></canvas>
+</section>
+
+<section>
   <h2>Market Prices</h2>
   <p>Enter a price per ISIN to override, or auto-fetch current prices from Finnhub.</p>
   <p><button id="refresh-prices-btn" onclick="refreshPrices()">Refresh prices (Finnhub)</button> <span id="price-status"></span></p>

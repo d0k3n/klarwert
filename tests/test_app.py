@@ -88,6 +88,7 @@ def test_analysis_endpoints_do_not_500():
         "/api/tax_report?year=2025",
         "/api/lot_matches",
         "/api/summary",
+        "/api/daily_pl",
     ]:
         resp = client.get(endpoint)
         assert resp.status_code == 200, f"{endpoint} returned {resp.status_code}"
